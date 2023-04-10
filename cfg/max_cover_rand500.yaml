@@ -1,0 +1,66 @@
+train_data_type: 'random'
+test_data_type: 'random'
+train_max_covering_items: 50
+test_max_covering_items: 50
+num_sets: 500
+num_items: 1000
+train_lr: 1.e-4
+train_iter: 100
+
+verbose: True
+
+methods:
+   - 'greedy'
+   - 'gurobi'
+   - 'scip'
+   - 'egn'
+   - 'cardnn-s'
+   - 'cardnn-gs'
+   - 'cardnn-hgs'
+   - 'perturb-topk'
+   - 'blackbox-topk'
+   - 'lml-topk'
+
+solver_timeout: 30 # time limit for SCIP/Gurobi
+
+# Config for EGN
+egn_beta: 1000
+egn_trials: 500 # number of EGN-accu trials
+
+# Config for CardNN-S and CardNN-GS
+sinkhorn_tau: 0.05
+sinkhorn_iter: 100
+gumbel_sample_num: 1000
+train_gumbel_sample_num: 10 # less samples for training
+gumbel_sigma: 0.15
+soft_opt_iter: 800
+gs_opt_iter: 1000
+
+# Config for CardNN-HGS
+homotophy_tau:
+  - 0.05
+  - 0.04
+  - 0.03
+homotophy_sigma:
+  - 0.15
+  - 0.15
+  - 0.15
+homotophy_sk_iter:
+  - 100
+  - 200
+  - 300
+homotophy_opt_iter:
+  - 1000
+  - 100
+  - 100
+
+# Config for perturb differentiation baseline
+perturb_sigma: 0.01
+perturb_opt_iter: 1000
+
+# Config for black-box differentiation baseline
+blackbox_lambda: 0.2
+blackbox_opt_iter: 100000
+
+# Config for LML baseline
+lml_opt_iter: 20000

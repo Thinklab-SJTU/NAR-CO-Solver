@@ -1,0 +1,55 @@
+train_data_type: 'random'
+test_data_type: 'random'
+distance_metric: 'euclidean'
+dim: 2
+num_data: 800
+train_num_centers: 50
+test_num_centers: 50
+train_lr: 1.e-4
+train_iter: 100 # for CardNN
+train_iter_egn: 500 # for EGN
+
+verbose: True
+
+methods:
+   - 'greedy'
+   - 'gurobi'
+   - 'scip'
+   - 'egn'
+   - 'cardnn-s'
+   - 'cardnn-gs'
+   - 'cardnn-hgs'
+
+solver_timeout: 200 # time limit for SCIP/Gurobi
+
+# Config for EGN
+egn_beta: 10
+egn_trials: 200 # number of EGN-accu trials
+
+# Config for CardNN-S and CardNN-GS
+sinkhorn_tau: 0.05
+sinkhorn_iter: 100
+gumbel_sample_num: 500
+train_gumbel_sample_num: 10 # less samples for training
+gumbel_sigma: 0.25
+soft_opt_iter: 800
+gs_opt_iter: 1500
+softmax_temp: 60
+
+# Config for CardNN-HGS
+homotophy_tau:
+  - 0.05
+  - 0.04
+  - 0.03
+homotophy_sigma:
+  - 0.25
+  - 0.25
+  - 0.25
+homotophy_sk_iter:
+  - 100
+  - 200
+  - 300
+homotophy_opt_iter:
+  - 1000
+  - 500
+  - 200
