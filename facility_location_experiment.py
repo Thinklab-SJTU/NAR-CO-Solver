@@ -36,7 +36,7 @@ else:
 model = GNNModel().to(device)
 
 for method_name in cfg.methods:
-    model_path = f'discrete_clustering_{cfg.train_data_type}_{cfg.train_num_centers}-{cfg.num_data}_{method_name}.pt'
+    model_path = f'facility_location_{cfg.train_data_type}_{cfg.train_num_centers}-{cfg.num_data}_{method_name}.pt'
     if not os.path.exists(model_path) and method_name in ['cardnn-gs', 'cardnn-s', 'egn']:
         print(f'Training the model weights for {method_name}...')
         model = GNNModel().to(device)
@@ -107,7 +107,7 @@ for index, (prob_name, points) in enumerate(dataset):
     if 'greedy' in cfg.methods:
         method_idx += 1
         prev_time = time.time()
-        cluster_centers, selected_indices = greedy_discrete_clustering(points, cfg.test_num_centers, distance=cfg.distance_metric, device=points.device)
+        cluster_centers, selected_indices = greedy_facility_location(points, cfg.test_num_centers, distance=cfg.distance_metric, device=points.device)
         objective = compute_objective(points, cluster_centers, cfg.distance_metric).item()
         print(f'{prob_name} greedy objective={objective:.4f} '
               f'selected={sorted(selected_indices.cpu().numpy().tolist())} '
@@ -122,7 +122,7 @@ for index, (prob_name, points) in enumerate(dataset):
         # Gurobi - integer programming
         method_idx += 1
         prev_time = time.time()
-        ip_obj, ip_scores = gurobi_discrete_clustering(
+        ip_obj, ip_scores = gurobi_facility_location(
             points, cfg.test_num_centers, distance=cfg.distance_metric, linear_relaxation=False,
             timeout_sec=cfg.solver_timeout, verbose=cfg.verbose)
         ip_scores = torch.tensor(ip_scores)
@@ -140,7 +140,7 @@ for index, (prob_name, points) in enumerate(dataset):
         # SCIP - integer programming
         method_idx += 1
         prev_time = time.time()
-        ip_obj, ip_scores = ortools_discrete_clustering(
+        ip_obj, ip_scores = ortools_facility_location(
             points, cfg.test_num_centers, distance=cfg.distance_metric, linear_relaxation=False,
             timeout_sec=cfg.solver_timeout, solver_name='SCIP')
         ip_scores = torch.tensor(ip_scores)
@@ -157,8 +157,8 @@ for index, (prob_name, points) in enumerate(dataset):
     if 'egn' in cfg.methods:
         # Erdos Goes Neural
         method_idx += 1
-        model.load_state_dict(torch.load(f'discrete_clustering_{cfg.train_data_type}_{cfg.train_num_centers}-{cfg.num_data}_egn.pt'))
-        objective, selected_indices, finish_time = egn_discrete_clustering(
+        model.load_state_dict(torch.load(f'facility_location_{cfg.train_data_type}_{cfg.train_num_centers}-{cfg.num_data}_egn.pt'))
+        objective, selected_indices, finish_time = egn_facility_location(
             points, cfg.test_num_centers, model, cfg.softmax_temp, cfg.egn_beta,
             time_limit=-1, distance_metric=cfg.distance_metric)
         print(f'{prob_name} EGN objective={objective:.4f} selected={sorted(selected_indices.cpu().numpy().tolist())} time={finish_time}')
@@ -169,7 +169,7 @@ for index, (prob_name, points) in enumerate(dataset):
         ws.write(index + 1, method_idx * 2, finish_time)
 
         method_idx += 1
-        objective, selected_indices, finish_time = egn_discrete_clustering(
+        objective, selected_indices, finish_time = egn_facility_location(
             points, cfg.test_num_centers, model, cfg.softmax_temp, cfg.egn_beta, cfg.egn_trials,
             time_limit=-1, distance_metric=cfg.distance_metric)
         print(f'{prob_name} EGN-accu objective={objective:.4f} selected={sorted(selected_indices.cpu().numpy().tolist())} time={finish_time}')
@@ -182,8 +182,8 @@ for index, (prob_name, points) in enumerate(dataset):
     if 'cardnn-s' in cfg.methods:
         # CardNN-S
         method_idx += 1
-        model.load_state_dict(torch.load(f'discrete_clustering_{cfg.train_data_type}_{cfg.train_num_centers}-{cfg.num_data}_cardnn-s.pt'))
-        objective, selected_indices, finish_time = sinkhorn_discrete_clustering(
+        model.load_state_dict(torch.load(f'facility_location_{cfg.train_data_type}_{cfg.train_num_centers}-{cfg.num_data}_cardnn-s.pt'))
+        objective, selected_indices, finish_time = sinkhorn_facility_location(
             points, cfg.test_num_centers, model,
             cfg.softmax_temp, 1, 0, cfg.sinkhorn_tau, cfg.sinkhorn_iter, cfg.soft_opt_iter,
             time_limit=-1, verbose=cfg.verbose, distance_metric=cfg.distance_metric)
@@ -197,8 +197,8 @@ for index, (prob_name, points) in enumerate(dataset):
     if 'cardnn-gs' in cfg.methods:
         # CardNN-GS
         method_idx += 1
-        model.load_state_dict(torch.load(f'discrete_clustering_{cfg.train_data_type}_{cfg.train_num_centers}-{cfg.num_data}_cardnn-gs.pt'))
-        objective, selected_indices, finish_time = sinkhorn_discrete_clustering(
+        model.load_state_dict(torch.load(f'facility_location_{cfg.train_data_type}_{cfg.train_num_centers}-{cfg.num_data}_cardnn-gs.pt'))
+        objective, selected_indices, finish_time = sinkhorn_facility_location(
             points, cfg.test_num_centers, model,
             cfg.softmax_temp, cfg.gumbel_sample_num, cfg.gumbel_sigma, cfg.sinkhorn_tau, cfg.sinkhorn_iter, cfg.gs_opt_iter,
             time_limit=-1, verbose=cfg.verbose, distance_metric=cfg.distance_metric)
@@ -213,8 +213,8 @@ for index, (prob_name, points) in enumerate(dataset):
     if 'cardnn-hgs' in cfg.methods:
         # CardNN-HGS
         method_idx += 1
-        model.load_state_dict(torch.load(f'discrete_clustering_{cfg.train_data_type}_{cfg.train_num_centers}-{cfg.num_data}_cardnn-gs.pt'))
-        objective, selected_indices, finish_time = sinkhorn_discrete_clustering(
+        model.load_state_dict(torch.load(f'facility_location_{cfg.train_data_type}_{cfg.train_num_centers}-{cfg.num_data}_cardnn-gs.pt'))
+        objective, selected_indices, finish_time = sinkhorn_facility_location(
             points, cfg.test_num_centers, model,
             cfg.softmax_temp, cfg.gumbel_sample_num, cfg.homotophy_sigma, cfg.homotophy_tau, cfg.homotophy_sk_iter, cfg.homotophy_opt_iter,
             time_limit=-1, verbose=cfg.verbose, distance_metric=cfg.distance_metric)
@@ -225,5 +225,5 @@ for index, (prob_name, points) in enumerate(dataset):
         ws.write(index + 1, method_idx * 2 - 1, objective)
         ws.write(index + 1, method_idx * 2, finish_time)
 
-    wb.save(f'discrete_clustering_result_{cfg.test_data_type}_{cfg.test_num_centers}-{cfg.num_data}_{timestamp}.xls')
+    wb.save(f'facility_location_result_{cfg.test_data_type}_{cfg.test_num_centers}-{cfg.num_data}_{timestamp}.xls')
     plt.close()

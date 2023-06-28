@@ -43,7 +43,7 @@ def build_graph_from_points(points, dist=None, return_dist=False, distance_metri
 
 
 #################################################
-#         Learning Clustering Methods           #
+#             Learning FLP Methods              #
 #################################################
 
 class GNNModel(torch.nn.Module):
@@ -67,9 +67,9 @@ class GNNModel(torch.nn.Module):
             param.zero_()
 
 
-def egn_discrete_clustering(points, num_clusters, model,
-                            softmax_temp, egn_beta, random_trials=0,
-                            time_limit=-1, distance_metric='euclidean'):
+def egn_facility_location(points, num_clusters, model,
+                          softmax_temp, egn_beta, random_trials=0,
+                          time_limit=-1, distance_metric='euclidean'):
     prev_time = time.time()
     graph, dist = build_graph_from_points(points, None, True, distance_metric)
     graph.ori_x = graph.x.clone()
@@ -116,10 +116,10 @@ def egn_discrete_clustering(points, num_clusters, model,
     return best_objective, best_selected_indices, time.time() - prev_time
 
 
-def sinkhorn_discrete_clustering(points, num_clusters, model,
-                                 softmax_temp, sample_num, noise, tau, sk_iters, opt_iters,
-                                 sample_num2=None, noise2=None, grad_step=0.1,
-                                 time_limit=-1, distance_metric='euclidean', verbose=True):
+def sinkhorn_facility_location(points, num_clusters, model,
+                               softmax_temp, sample_num, noise, tau, sk_iters, opt_iters,
+                               sample_num2=None, noise2=None, grad_step=0.1,
+                               time_limit=-1, distance_metric='euclidean', verbose=True):
     prev_time = time.time()
     #dist_sorted, dist_argsort = torch.sort(dist, dim=1)
     graph, dist = build_graph_from_points(points, None, True, distance_metric)
@@ -207,7 +207,7 @@ def sinkhorn_discrete_clustering(points, num_clusters, model,
 
 
 #################################################
-#        Traditional Clustering Methods         #
+#            Traditional FLP Methods            #
 #################################################
 
 def initialize(X: Tensor, num_clusters: int, method: str='plus') -> np.array:
@@ -524,7 +524,7 @@ def spectral_clustering(sim_matrix: Tensor, cluster_num: int, init: Tensor=None,
         return choice_cluster
 
 
-def greedy_discrete_clustering(
+def greedy_facility_location(
         X: Tensor,
         num_clusters: int,
         weight: Tensor=None,
@@ -532,7 +532,8 @@ def greedy_discrete_clustering(
         device=torch.device('cpu'),
 ) -> Tuple[Tensor, Tensor]:
     r"""
-    Greedy algorithm for discrete clustering problem given data matrix :math:`\mathbf X`.
+    Greedy algorithm for facility location problem.
+    This is function also solves the discrete clustering problem given data matrix :math:`\mathbf X`.
     Here "discrete" means the selected cluster centers must be a subset of the input data :math:`\mathbf X`.
 
     :param X: :math:`(n\times d)` input data matrix. :math:`n`: number of samples. :math:`d`: feature dimension
@@ -571,7 +572,7 @@ def greedy_discrete_clustering(
     return cluster_centers, selected_indices
 
 
-def ortools_discrete_clustering(
+def ortools_facility_location(
         X: Tensor,
         num_clusters: int,
         distance: str='euclidean',
@@ -582,10 +583,10 @@ def ortools_discrete_clustering(
     # define solver instance
     if solver_name is None:
         if linear_relaxation:
-            solver = pywraplp.Solver('Discrete_clustering',
+            solver = pywraplp.Solver('facility_location',
                                      pywraplp.Solver.GLOP_LINEAR_PROGRAMMING)
         else:
-            solver = pywraplp.Solver('Discrete_clustering',
+            solver = pywraplp.Solver('facility_location',
                                      pywraplp.Solver.CBC_MIXED_INTEGER_PROGRAMMING)
     else:
         solver = pywraplp.Solver.CreateSolver(solver_name)
@@ -651,7 +652,7 @@ def ortools_discrete_clustering(
         return solver.Objective().Value(), [VarX[_].solution_value() for _ in range(X.shape[0])]
 
 
-def gurobi_discrete_clustering(
+def gurobi_facility_location(
         X: Tensor,
         num_clusters: int,
         distance: str='euclidean',
@@ -662,7 +663,7 @@ def gurobi_discrete_clustering(
 ):
     import gurobipy as grb
     try:
-        model = grb.Model('discrete clustering')
+        model = grb.Model('facility location')
         if verbose:
             model.setParam('LogToConsole', 1)
         else:
