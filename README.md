@@ -61,7 +61,7 @@ In this paper, we compare three ways of handling cardinality constraints, theore
   Specifically, the constraint violation can be arbitrarily controlled, and its theoretical 
   upper bound is tighter than SOFT-TopK by introducing the Gumbel trick.
   
-For the math details, please see the main paper.
+Please see the main paper for the math details.
 Our experiment shows consistent result with the theoretical study: empirically, we have Erdos
 Goes Neural (EGN) < SOFT-TopK (CardNN-S) < Gumbel-Sinkhorn-TopK (CardNN-GS). Experiments are 
 conducted on both synthetic problems (in line with most neural CO solver papers), and transfer
@@ -157,12 +157,14 @@ because we do not know the real returns/risks at the decision-making time.
 
 To run the code, first install ``torch`` and ``torch_geometric`` according to the official 
 docs ([[PyTorch]](https://pytorch.org/get-started/locally/), [[Geometric]](https://pytorch-geometric.readthedocs.io/en/latest/install/installation.html)).
-If you face any issues, there are many online resources available.
+The versions we used are ``torch==1.6.0`` and ``torch-geometric==1.6.3``, and we think any 
+newer versions will work too. If you face any issues during installation, there are many 
+online resources available.
 
 Then install the following Python packages:
 
 ```
-pip install ortools matplotlib yfinance pandas cvxpylayers xlwt
+pip install ortools easydict matplotlib yfinance pandas cvxpylayers xlwt
 ```
 
 ## Run the Experiments
