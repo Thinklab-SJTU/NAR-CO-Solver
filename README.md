@@ -61,6 +61,7 @@ In this paper, we compare three ways of handling cardinality constraints, theore
   Specifically, the constraint violation can be arbitrarily controlled, and its theoretical 
   upper bound is tighter than SOFT-TopK by introducing the Gumbel trick.
   
+For the math details, please see the main paper.
 Our experiment shows consistent result with the theoretical study: empirically, we have Erdos
 Goes Neural (EGN) < SOFT-TopK (CardNN-S) < Gumbel-Sinkhorn-TopK (CardNN-GS). Experiments are 
 conducted on both synthetic problems (in line with most neural CO solver papers), and transfer
