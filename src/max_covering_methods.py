@@ -5,8 +5,8 @@ import torch
 import torch_geometric as pyg
 import time
 from src.gumbel_sinkhorn_topk import gumbel_sinkhorn_topk
-import src.perturbations
-import src.blackbox_diff
+import src.perturbations as perturbations
+import src.blackbox_diff as blackbox_diff
 from lap_solvers.lml import LML
 
 
