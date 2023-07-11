@@ -28,6 +28,7 @@ egn_trials: 20 # number of EGN-accu trials
 sinkhorn_tau: 0.05
 sinkhorn_iter: 100
 gumbel_sample_num: 50
+train_gumbel_sample_num: 10 # less samples for training
 gumbel_sigma: 0.01
 soft_opt_iter: 200
 gs_opt_iter: 400
