@@ -64,7 +64,7 @@ for method_name in cfg.methods:
                     obj_sum += obj.mean()
                     train_outer_optimizer.step()
                     train_outer_optimizer.zero_grad()
-                print(f'epoch {epoch}, obj={obj_sum / len(train_dataset)}')
+                print(f'epoch {epoch}/{cfg.train_iter}, obj={obj_sum / len(train_dataset)}')
         if method_name in ['egn']:
             train_outer_optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
             # training loop
@@ -80,7 +80,7 @@ for method_name in cfg.methods:
                     train_outer_optimizer.step()
                     train_outer_optimizer.zero_grad()
 
-                print(f'epoch {epoch}, obj={obj_sum / len(train_dataset)}')
+                print(f'epoch {epoch}/{cfg.train_iter_egn}, obj={obj_sum / len(train_dataset)}')
         torch.save(model.state_dict(), model_path)
         print(f'Model saved to {model_path}.')
 
