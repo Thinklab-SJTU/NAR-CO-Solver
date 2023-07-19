@@ -1,8 +1,5 @@
 from constraint_layers.sinkhorn import Sinkhorn
 import torch
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 
 
 def soft_topk(scores, k, max_iter=100, tau=1., return_prob=False):
@@ -38,7 +35,6 @@ def gumbel_sinkhorn_topk(scores, k, max_iter=100, tau=1., noise_fact=1., sample_
 
     output = sk(s_rep, rows_rep, cols_rep)
 
-    #print(output)
     top_k_indices = torch.topk(output[:, :, 1], k, dim=-1).indices
 
     if return_prob:
@@ -48,6 +44,9 @@ def gumbel_sinkhorn_topk(scores, k, max_iter=100, tau=1., noise_fact=1., sample_
 
 
 if __name__ == '__main__':
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
     import numpy as np
     a = torch.randn((100,)).cuda()
     fig = plt.figure(figsize=(15, 50), dpi=120)
