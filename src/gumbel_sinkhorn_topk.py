@@ -1,4 +1,4 @@
-from lap_solvers.sinkhorn import GumbelSinkhorn, Sinkhorn
+from constraint_layers.sinkhorn import Sinkhorn
 import torch
 import matplotlib
 matplotlib.use('Agg')

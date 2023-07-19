@@ -7,7 +7,7 @@ import time
 from src.gumbel_sinkhorn_topk import gumbel_sinkhorn_topk
 import src.perturbations as perturbations
 import src.blackbox_diff as blackbox_diff
-from lap_solvers.lml import LML
+from constraint_layers.lml import LML
 
 
 ####################################
