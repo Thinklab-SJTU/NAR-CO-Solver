@@ -6,7 +6,7 @@ import torch_geometric as pyg
 import time
 from src.gumbel_sinkhorn_topk import gumbel_sinkhorn_topk
 import src.perturbations as perturbations
-import src.blackbox_diff as blackbox_diff
+import constraint_layers.blackbox_diff as blackbox_diff
 from constraint_layers.lml import LML
 
 
