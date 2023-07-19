@@ -102,7 +102,7 @@ for index, (prob_name, points) in enumerate(dataset):
     method_idx = 0
     print('-' * 20)
     print(f'{prob_name} points={len(points)} select={cfg.test_num_centers}')
-    ws.write(index+1, 0, prob_name)
+    ws.write(index + 1, 0, prob_name)
 
     if 'greedy' in cfg.methods:
         method_idx += 1
@@ -129,12 +129,12 @@ for index, (prob_name, points) in enumerate(dataset):
         top_k_indices = torch.nonzero(ip_scores, as_tuple=False).view(-1)
         print(f'{prob_name} Gurobi objective={ip_obj:.4f} '
               f'selected={sorted(top_k_indices.cpu().numpy().tolist())} '
-              f'time={time.time()-prev_time}')
+              f'time={time.time() - prev_time}')
         if index == 0:
-            ws.write(0, method_idx*2-1, 'Gurobi-objective')
-            ws.write(0, method_idx*2, 'Gurobi-time')
-        ws.write(index+1, method_idx*2-1, ip_obj)
-        ws.write(index+1, method_idx*2, time.time()-prev_time)
+            ws.write(0, method_idx * 2 - 1, 'Gurobi-objective')
+            ws.write(0, method_idx * 2, 'Gurobi-time')
+        ws.write(index + 1, method_idx * 2 - 1, ip_obj)
+        ws.write(index + 1, method_idx * 2, time.time() - prev_time)
 
     if 'scip' in cfg.methods:
         # SCIP - integer programming
@@ -147,12 +147,12 @@ for index, (prob_name, points) in enumerate(dataset):
         top_k_indices = torch.nonzero(ip_scores, as_tuple=False).view(-1)
         print(f'{prob_name} SCIP objective={ip_obj:.4f} '
               f'selected={sorted(top_k_indices.cpu().numpy().tolist())} '
-              f'time={time.time()-prev_time}')
+              f'time={time.time() - prev_time}')
         if index == 0:
-            ws.write(0, method_idx*2-1, 'SCIP-objective')
-            ws.write(0, method_idx*2, 'SCIP-time')
-        ws.write(index+1, method_idx*2-1, ip_obj)
-        ws.write(index+1, method_idx*2, time.time()-prev_time)
+            ws.write(0, method_idx * 2 - 1, 'SCIP-objective')
+            ws.write(0, method_idx * 2, 'SCIP-time')
+        ws.write(index + 1, method_idx * 2 - 1, ip_obj)
+        ws.write(index + 1, method_idx * 2, time.time() - prev_time)
 
     if 'egn' in cfg.methods:
         # Erdos Goes Neural
@@ -191,8 +191,8 @@ for index, (prob_name, points) in enumerate(dataset):
         if index == 0:
             ws.write(0, method_idx * 2 - 1, 'CardNN-S-objective')
             ws.write(0, method_idx * 2, 'CardNN-S-time')
-        ws.write(index+1, method_idx*2-1, objective)
-        ws.write(index+1, method_idx*2, finish_time)
+        ws.write(index + 1, method_idx * 2 - 1, objective)
+        ws.write(index + 1, method_idx * 2, finish_time)
 
     if 'cardnn-gs' in cfg.methods:
         # CardNN-GS

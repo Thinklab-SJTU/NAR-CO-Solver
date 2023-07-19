@@ -47,9 +47,6 @@ def gumbel_sinkhorn_topk(scores, k, max_iter=100, tau=1., noise_fact=1., sample_
         return top_k_indices
 
 
-#print(f'diff = ', torch.sum(torch.abs(hung_out-greedy_out), dim=[-1,-2]))
-
-
 if __name__ == '__main__':
     import numpy as np
     a = torch.randn((100,)).cuda()

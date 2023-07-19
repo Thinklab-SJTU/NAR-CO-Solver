@@ -103,19 +103,19 @@ for index, (name, weights, sets) in enumerate(dataset):
     method_idx = 0
     print('-' * 20)
     print(f'{name} items={len(weights)} sets={len(sets)}')
-    ws.write(index+1, 0, name)
+    ws.write(index + 1, 0, name)
 
     # greedy
     if 'greedy' in cfg.methods:
         method_idx += 1
         prev_time = time.time()
         objective, selected = greedy_max_covering(weights, sets, cfg.test_max_covering_items)
-        print(f'{name} greedy objective={objective} selected={sorted(selected)} time={time.time()-prev_time}')
+        print(f'{name} greedy objective={objective} selected={sorted(selected)} time={time.time() - prev_time}')
         if index == 0:
-            ws.write(0, method_idx*2-1, 'greedy-objective')
-            ws.write(0, method_idx*2, 'greedy-time')
-        ws.write(index+1, method_idx*2-1, objective)
-        ws.write(index+1, method_idx*2, time.time()-prev_time)
+            ws.write(0, method_idx * 2 - 1, 'greedy-objective')
+            ws.write(0, method_idx * 2, 'greedy-time')
+        ws.write(index + 1, method_idx * 2 - 1, objective)
+        ws.write(index + 1, method_idx * 2, time.time() - prev_time)
 
     # SCIP - integer programming
     if 'scip' in cfg.methods:
@@ -125,12 +125,12 @@ for index, (name, weights, sets) in enumerate(dataset):
         ip_scores = torch.tensor(ip_scores)
         top_k_indices = torch.nonzero(ip_scores, as_tuple=False).view(-1)
         top_k_indices = sorted(top_k_indices.cpu().numpy().tolist())
-        print(f'{name} SCIP objective={ip_obj:.0f} selected={top_k_indices} time={time.time()-prev_time}')
+        print(f'{name} SCIP objective={ip_obj:.0f} selected={top_k_indices} time={time.time() - prev_time}')
         if index == 0:
-            ws.write(0, method_idx*2-1, 'SCIP-objective')
-            ws.write(0, method_idx*2, 'SCIP-time')
-        ws.write(index+1, method_idx*2-1, ip_obj)
-        ws.write(index+1, method_idx*2, time.time()-prev_time)
+            ws.write(0, method_idx * 2 - 1, 'SCIP-objective')
+            ws.write(0, method_idx * 2, 'SCIP-time')
+        ws.write(index + 1, method_idx * 2 - 1, ip_obj)
+        ws.write(index + 1, method_idx * 2, time.time() - prev_time)
 
     # Gurobi - integer programming
     if 'gurobi' in cfg.methods:
@@ -140,12 +140,12 @@ for index, (name, weights, sets) in enumerate(dataset):
         ip_scores = torch.tensor(ip_scores)
         top_k_indices = torch.nonzero(ip_scores, as_tuple=False).view(-1)
         top_k_indices = sorted(top_k_indices.cpu().numpy().tolist())
-        print(f'{name} Gurobi objective={ip_obj:.0f} selected={top_k_indices} time={time.time()-prev_time}')
+        print(f'{name} Gurobi objective={ip_obj:.0f} selected={top_k_indices} time={time.time() - prev_time}')
         if index == 0:
-            ws.write(0, method_idx*2-1, 'Gurobi-objective')
-            ws.write(0, method_idx*2, 'Gurobi-time')
-        ws.write(index+1, method_idx*2-1, ip_obj)
-        ws.write(index+1, method_idx*2, time.time()-prev_time)
+            ws.write(0, method_idx * 2 - 1, 'Gurobi-objective')
+            ws.write(0, method_idx * 2, 'Gurobi-time')
+        ws.write(index + 1, method_idx * 2 - 1, ip_obj)
+        ws.write(index + 1, method_idx * 2, time.time() - prev_time)
 
     weights = torch.tensor(weights, dtype=torch.float, device=device)
 
@@ -177,12 +177,12 @@ for index, (name, weights, sets) in enumerate(dataset):
         model_path = f'max_covering_{cfg.train_data_type}_{cfg.train_max_covering_items}-{cfg.num_sets}-{cfg.num_items}_cardnn-s.pt'
         model.load_state_dict(torch.load(model_path))
         best_obj, best_top_k_indices = sinkhorn_max_covering(weights, sets, cfg.test_max_covering_items, model, 1, 0, cfg.sinkhorn_tau, cfg.sinkhorn_iter, cfg.soft_opt_iter, verbose=cfg.verbose)
-        print(f'{name} CardNN-S objective={best_obj:.0f} selected={sorted(best_top_k_indices.cpu().numpy().tolist())} time={time.time()-prev_time}')
+        print(f'{name} CardNN-S objective={best_obj:.0f} selected={sorted(best_top_k_indices.cpu().numpy().tolist())} time={time.time() - prev_time}')
         if index == 0:
             ws.write(0, method_idx * 2 - 1, 'CardNN-S-objective')
             ws.write(0, method_idx * 2, 'CardNN-S-time')
-        ws.write(index+1, method_idx*2-1, best_obj.item())
-        ws.write(index+1, method_idx*2, time.time()-prev_time)
+        ws.write(index + 1, method_idx * 2 - 1, best_obj.item())
+        ws.write(index + 1, method_idx * 2, time.time() - prev_time)
 
     # CardNN-GS
     if 'cardnn-gs' in cfg.methods:
@@ -191,12 +191,12 @@ for index, (name, weights, sets) in enumerate(dataset):
         model_path = f'max_covering_{cfg.train_data_type}_{cfg.train_max_covering_items}-{cfg.num_sets}-{cfg.num_items}_cardnn-gs.pt'
         model.load_state_dict(torch.load(model_path))
         best_obj, best_top_k_indices = sinkhorn_max_covering(weights, sets, cfg.test_max_covering_items, model, cfg.gumbel_sample_num, cfg.gumbel_sigma, cfg.sinkhorn_tau, cfg.sinkhorn_iter, cfg.gs_opt_iter, verbose=cfg.verbose)
-        print(f'{name} CardNN-GS objective={best_obj:.0f} selected={sorted(best_top_k_indices.cpu().numpy().tolist())} time={time.time()-prev_time}')
+        print(f'{name} CardNN-GS objective={best_obj:.0f} selected={sorted(best_top_k_indices.cpu().numpy().tolist())} time={time.time() - prev_time}')
         if index == 0:
             ws.write(0, method_idx * 2 - 1, 'CardNN-GS-objective')
             ws.write(0, method_idx * 2, 'CardNN-GS-time')
-        ws.write(index+1, method_idx*2-1, best_obj.item())
-        ws.write(index+1, method_idx*2, time.time()-prev_time)
+        ws.write(index + 1, method_idx * 2 - 1, best_obj.item())
+        ws.write(index + 1, method_idx * 2, time.time() - prev_time)
 
     # CardNN-HGS
     if 'cardnn-hgs' in cfg.methods:
@@ -221,12 +221,12 @@ for index, (name, weights, sets) in enumerate(dataset):
         best_obj, best_top_k_indices = gumbel_max_covering(weights, sets, cfg.test_max_covering_items, model,
                                                            cfg.gumbel_sample_num * 10, # needs 10x more samples than others
                                                            cfg.perturb_sigma, cfg.perturb_opt_iter, verbose=cfg.verbose)
-        print(f'{name} perturb-TopK objective={best_obj:.0f} selected={sorted(best_top_k_indices.cpu().numpy().tolist())} time={time.time()-prev_time}')
+        print(f'{name} perturb-TopK objective={best_obj:.0f} selected={sorted(best_top_k_indices.cpu().numpy().tolist())} time={time.time() - prev_time}')
         if index == 0:
             ws.write(0, method_idx * 2 - 1, 'perturb-TopK-objective')
             ws.write(0, method_idx * 2, 'perturb-TopK-time')
-        ws.write(index+1, method_idx*2-1, best_obj.item())
-        ws.write(index+1, method_idx*2, time.time()-prev_time)
+        ws.write(index + 1, method_idx * 2 - 1, best_obj.item())
+        ws.write(index + 1, method_idx * 2, time.time() - prev_time)
 
     # blackbox-TopK
     if 'blackbox-topk' in cfg.methods:
@@ -235,12 +235,12 @@ for index, (name, weights, sets) in enumerate(dataset):
         model_path = f'max_covering_{cfg.train_data_type}_{cfg.train_max_covering_items}-{cfg.num_sets}-{cfg.num_items}_cardnn-gs.pt'
         model.load_state_dict(torch.load(model_path))
         best_obj, best_top_k_indices = blackbox_max_covering(weights, sets, cfg.test_max_covering_items, model, cfg.blackbox_lambda, cfg.blackbox_opt_iter, verbose=cfg.verbose)
-        print(f'{name} blackbox-TopK objective={best_obj:.0f} selected={sorted(best_top_k_indices.cpu().numpy().tolist())} time={time.time()-prev_time}')
+        print(f'{name} blackbox-TopK objective={best_obj:.0f} selected={sorted(best_top_k_indices.cpu().numpy().tolist())} time={time.time() - prev_time}')
         if index == 0:
             ws.write(0, method_idx * 2 - 1, 'blackbox-TopK-objective')
             ws.write(0, method_idx * 2, 'blackbox-TopK-time')
-        ws.write(index+1, method_idx*2-1, best_obj.item())
-        ws.write(index+1, method_idx*2, time.time()-prev_time)
+        ws.write(index + 1, method_idx * 2 - 1, best_obj.item())
+        ws.write(index + 1, method_idx * 2, time.time() - prev_time)
 
     # LML-TopK
     if 'lml-topk' in cfg.methods:
