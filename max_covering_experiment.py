@@ -77,7 +77,7 @@ for method_name in cfg.methods:
 
                     train_optimizer.step()
                     train_optimizer.zero_grad()
-                print(f'epoch {epoch}/{cfg.train_iter_egn}, obj={obj_sum / len(train_dataset)}')
+                print(f'epoch {epoch}/{cfg.train_iter}, obj={obj_sum / len(train_dataset)}')
         torch.save(model.state_dict(), model_path)
         print(f'Model saved to {model_path}.')
 
