@@ -9,7 +9,7 @@ train_lr: 1.e-4
 train_iter: 100 # for CardNN
 train_iter_egn: 500 # for EGN
 
-verbose: True
+verbose: False
 
 methods:
    - 'greedy'
