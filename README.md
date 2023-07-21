@@ -171,7 +171,7 @@ pip install ortools easydict matplotlib yfinance pandas cvxpylayers xlwt
 
 Follow the next steps and you shall reproduce the main results in our paper.
 
-**Note:** If you are seeing results way inferior than our paper, it is probably a reason
+**Note:** If you are seeing results way inferior to our paper, it is probably a reason
 of random seeds. Please delete the model weights and train the model again.
 
 ### Facility Location Problem (FLP)
