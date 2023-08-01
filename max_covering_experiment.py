@@ -225,9 +225,9 @@ for index, (name, weights, sets) in enumerate(dataset):
         prev_time = time.time()
         model_path = f'max_covering_{cfg.train_data_type}_{cfg.train_max_covering_items}-{cfg.num_sets}-{cfg.num_items}_cardnn-gs.pt'
         model.load_state_dict(torch.load(model_path))
-        best_obj, best_top_k_indices = gumbel_max_covering(weights, sets, cfg.test_max_covering_items, model,
-                                                           cfg.gumbel_sample_num * 10, # needs 10x more samples than others
-                                                           cfg.perturb_sigma, cfg.perturb_opt_iter, verbose=cfg.verbose)
+        best_obj, best_top_k_indices = perturb_max_covering(weights, sets, cfg.test_max_covering_items, model,
+                                                            cfg.gumbel_sample_num * 10, cfg.perturb_sigma,
+                                                            cfg.perturb_opt_iter, verbose=cfg.verbose)
         print(f'{name} perturb-TopK objective={best_obj:.0f} selected={sorted(best_top_k_indices.cpu().numpy().tolist())} time={time.time() - prev_time}')
         if index == 0:
             ws.write(0, method_idx * 2 - 1, 'perturb-TopK-objective')

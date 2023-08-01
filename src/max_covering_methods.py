@@ -177,6 +177,9 @@ def cardnn_max_covering(weights, sets, max_covering_items, model, sample_num, no
 def egn_max_covering(weights, sets, max_covering_items, model, egn_beta, random_trials=0, time_limit=-1):
     """
     Our implementation of the Erdos Goes Neural (EGN) solver for max covering.
+
+    Karalias and Loukas, “Erdo˝s Goes Neural: An Unsupervised Learning Framework for Combinatorial Optimization on
+    Graphs.” NeurIPS 2020.
     """
     prev_time = time.time()
     graph = build_graph_from_weights_sets(weights, sets, weights.device)
@@ -222,6 +225,11 @@ def egn_max_covering(weights, sets, max_covering_items, model, egn_beta, random_
 
 
 def lml_max_covering(weights, sets, max_covering_items, model, opt_iters, verbose=True):
+    """
+    Our implementation of the Limited Multi-Label (LML) Projection Layer solver for max covering.
+
+    Amos, Koltun, and Kolter, “The Limited Multi-Label Projection Layer.” 2019.
+    """
     graph = build_graph_from_weights_sets(weights, sets, weights.device)
     latent_vars = model(graph).detach()
     latent_vars.requires_grad_(True)
@@ -251,7 +259,12 @@ def lml_max_covering(weights, sets, max_covering_items, model, opt_iters, verbos
     return best_obj, best_top_k_indices
 
 
-def gumbel_max_covering(weights, sets, max_covering_items, model, sample_num, noise, opt_iters, verbose=True):
+def perturb_max_covering(weights, sets, max_covering_items, model, sample_num, noise, opt_iters, verbose=True):
+    """
+    Our implementation of the Perturb-based Differentiation solver for max covering.
+
+    Berthet et al., “Learning with Differentiable Perturbed Optimizers.” NeurIPS 2020.
+    """
     graph = build_graph_from_weights_sets(weights, sets, weights.device)
     latent_vars = model(graph).detach()
     latent_vars.requires_grad_(True)
@@ -293,6 +306,11 @@ def gumbel_max_covering(weights, sets, max_covering_items, model, sample_num, no
 
 
 def blackbox_max_covering(weights, sets, max_covering_items, model, lambda_param, opt_iters, verbose=True):
+    """
+    Our implementation of the Blackbox differentiation solver for max covering.
+
+    Vlastelica et al., “Differentiation of Blackbox Combinatorial Solvers.” ICLR 2020.
+    """
     graph = build_graph_from_weights_sets(weights, sets, weights.device)
     latent_vars = model(graph).detach()
     latent_vars.requires_grad_(True)
