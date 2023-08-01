@@ -183,10 +183,12 @@ for index, (prob_name, points) in enumerate(dataset):
         # CardNN-S
         method_idx += 1
         model.load_state_dict(torch.load(f'facility_location_{cfg.train_data_type}_{cfg.train_num_centers}-{cfg.num_data}_cardnn-s.pt'))
-        objective, selected_indices, finish_time = sinkhorn_facility_location(
-            points, cfg.test_num_centers, model,
-            cfg.softmax_temp, 1, 0, cfg.sinkhorn_tau, cfg.sinkhorn_iter, cfg.soft_opt_iter,
-            time_limit=-1, verbose=cfg.verbose, distance_metric=cfg.distance_metric)
+        objective, selected_indices, finish_time = cardnn_facility_location(points, cfg.test_num_centers, model,
+                                                                            cfg.softmax_temp, 1, 0, cfg.sinkhorn_tau,
+                                                                            cfg.sinkhorn_iter, cfg.soft_opt_iter,
+                                                                            time_limit=-1,
+                                                                            distance_metric=cfg.distance_metric,
+                                                                            verbose=cfg.verbose)
         print(f'{prob_name} CardNN-S objective={objective:.4f} selected={sorted(selected_indices.cpu().numpy().tolist())} time={finish_time}')
         if index == 0:
             ws.write(0, method_idx * 2 - 1, 'CardNN-S-objective')
@@ -198,10 +200,13 @@ for index, (prob_name, points) in enumerate(dataset):
         # CardNN-GS
         method_idx += 1
         model.load_state_dict(torch.load(f'facility_location_{cfg.train_data_type}_{cfg.train_num_centers}-{cfg.num_data}_cardnn-gs.pt'))
-        objective, selected_indices, finish_time = sinkhorn_facility_location(
-            points, cfg.test_num_centers, model,
-            cfg.softmax_temp, cfg.gumbel_sample_num, cfg.gumbel_sigma, cfg.sinkhorn_tau, cfg.sinkhorn_iter, cfg.gs_opt_iter,
-            time_limit=-1, verbose=cfg.verbose, distance_metric=cfg.distance_metric)
+        objective, selected_indices, finish_time = cardnn_facility_location(points, cfg.test_num_centers, model,
+                                                                            cfg.softmax_temp, cfg.gumbel_sample_num,
+                                                                            cfg.gumbel_sigma, cfg.sinkhorn_tau,
+                                                                            cfg.sinkhorn_iter, cfg.gs_opt_iter,
+                                                                            time_limit=-1,
+                                                                            distance_metric=cfg.distance_metric,
+                                                                            verbose=cfg.verbose)
 
         print(f'{prob_name} CardNN-GS objective={objective:.4f} selected={sorted(selected_indices.cpu().numpy().tolist())} time={finish_time}')
         if index == 0:
@@ -214,10 +219,13 @@ for index, (prob_name, points) in enumerate(dataset):
         # CardNN-HGS
         method_idx += 1
         model.load_state_dict(torch.load(f'facility_location_{cfg.train_data_type}_{cfg.train_num_centers}-{cfg.num_data}_cardnn-gs.pt'))
-        objective, selected_indices, finish_time = sinkhorn_facility_location(
-            points, cfg.test_num_centers, model,
-            cfg.softmax_temp, cfg.gumbel_sample_num, cfg.homotophy_sigma, cfg.homotophy_tau, cfg.homotophy_sk_iter, cfg.homotophy_opt_iter,
-            time_limit=-1, verbose=cfg.verbose, distance_metric=cfg.distance_metric)
+        objective, selected_indices, finish_time = cardnn_facility_location(points, cfg.test_num_centers, model,
+                                                                            cfg.softmax_temp, cfg.gumbel_sample_num,
+                                                                            cfg.homotophy_sigma, cfg.homotophy_tau,
+                                                                            cfg.homotophy_sk_iter,
+                                                                            cfg.homotophy_opt_iter, time_limit=-1,
+                                                                            distance_metric=cfg.distance_metric,
+                                                                            verbose=cfg.verbose)
         print(f'{prob_name} CardNN-HGS objective={objective:.4f} selected={sorted(selected_indices.cpu().numpy().tolist())} time={finish_time}')
         if index == 0:
             ws.write(0, method_idx * 2 - 1, 'CardNN-HGS-objective')

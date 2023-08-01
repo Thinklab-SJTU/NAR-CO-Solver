@@ -176,7 +176,9 @@ for index, (name, weights, sets) in enumerate(dataset):
         prev_time = time.time()
         model_path = f'max_covering_{cfg.train_data_type}_{cfg.train_max_covering_items}-{cfg.num_sets}-{cfg.num_items}_cardnn-s.pt'
         model.load_state_dict(torch.load(model_path))
-        best_obj, best_top_k_indices = sinkhorn_max_covering(weights, sets, cfg.test_max_covering_items, model, 1, 0, cfg.sinkhorn_tau, cfg.sinkhorn_iter, cfg.soft_opt_iter, verbose=cfg.verbose)
+        best_obj, best_top_k_indices = cardnn_max_covering(weights, sets, cfg.test_max_covering_items, model, 1, 0,
+                                                           cfg.sinkhorn_tau, cfg.sinkhorn_iter, cfg.soft_opt_iter,
+                                                           verbose=cfg.verbose)
         print(f'{name} CardNN-S objective={best_obj:.0f} selected={sorted(best_top_k_indices.cpu().numpy().tolist())} time={time.time() - prev_time}')
         if index == 0:
             ws.write(0, method_idx * 2 - 1, 'CardNN-S-objective')
@@ -190,7 +192,9 @@ for index, (name, weights, sets) in enumerate(dataset):
         prev_time = time.time()
         model_path = f'max_covering_{cfg.train_data_type}_{cfg.train_max_covering_items}-{cfg.num_sets}-{cfg.num_items}_cardnn-gs.pt'
         model.load_state_dict(torch.load(model_path))
-        best_obj, best_top_k_indices = sinkhorn_max_covering(weights, sets, cfg.test_max_covering_items, model, cfg.gumbel_sample_num, cfg.gumbel_sigma, cfg.sinkhorn_tau, cfg.sinkhorn_iter, cfg.gs_opt_iter, verbose=cfg.verbose)
+        best_obj, best_top_k_indices = cardnn_max_covering(weights, sets, cfg.test_max_covering_items, model,
+                                                           cfg.gumbel_sample_num, cfg.gumbel_sigma, cfg.sinkhorn_tau,
+                                                           cfg.sinkhorn_iter, cfg.gs_opt_iter, verbose=cfg.verbose)
         print(f'{name} CardNN-GS objective={best_obj:.0f} selected={sorted(best_top_k_indices.cpu().numpy().tolist())} time={time.time() - prev_time}')
         if index == 0:
             ws.write(0, method_idx * 2 - 1, 'CardNN-GS-objective')
@@ -204,7 +208,10 @@ for index, (name, weights, sets) in enumerate(dataset):
         prev_time = time.time()
         model_path = f'max_covering_{cfg.train_data_type}_{cfg.train_max_covering_items}-{cfg.num_sets}-{cfg.num_items}_cardnn-gs.pt'
         model.load_state_dict(torch.load(model_path))
-        best_obj, best_top_k_indices = sinkhorn_max_covering(weights, sets, cfg.test_max_covering_items, model, cfg.gumbel_sample_num, cfg.homotophy_sigma, cfg.homotophy_tau, cfg.homotophy_sk_iter, cfg.homotophy_opt_iter, verbose=cfg.verbose)
+        best_obj, best_top_k_indices = cardnn_max_covering(weights, sets, cfg.test_max_covering_items, model,
+                                                           cfg.gumbel_sample_num, cfg.homotophy_sigma,
+                                                           cfg.homotophy_tau, cfg.homotophy_sk_iter,
+                                                           cfg.homotophy_opt_iter, verbose=cfg.verbose)
         print(f'{name} CardNN-HGS objective={best_obj:.0f} selected={sorted(best_top_k_indices.cpu().numpy().tolist())} time={time.time() - prev_time}')
         if index == 0:
             ws.write(0, method_idx * 2 - 1, 'CardNN-HGS-objective')

@@ -70,6 +70,9 @@ class GNNModel(torch.nn.Module):
 def egn_facility_location(points, num_clusters, model,
                           softmax_temp, egn_beta, random_trials=0,
                           time_limit=-1, distance_metric='euclidean'):
+    """
+    Our implementation of the Erdos Goes Neural (EGN) solver for facility location.
+    """
     prev_time = time.time()
     graph, dist = build_graph_from_points(points, None, True, distance_metric)
     graph.ori_x = graph.x.clone()
@@ -116,21 +119,50 @@ def egn_facility_location(points, num_clusters, model,
     return best_objective, best_selected_indices, time.time() - prev_time
 
 
-def sinkhorn_facility_location(points, num_clusters, model,
-                               softmax_temp, sample_num, noise, tau, sk_iters, opt_iters,
-                               sample_num2=None, noise2=None, grad_step=0.1,
-                               time_limit=-1, distance_metric='euclidean', verbose=True):
+def cardnn_facility_location(points, num_clusters, model,
+                             softmax_temp, sample_num, noise, tau, sk_iters, opt_iters,
+                             grad_step=0.1, time_limit=-1, distance_metric='euclidean', verbose=True):
+    """
+    The Cardinality neural network (CardNN) solver for facility location. This implementation supports 3 variants:
+    CardNN-S (Sinkhorn), CardNN-GS (Gumbel-Sinkhorn) and CardNN-HGS (Homotopy-Gumbel-Sinkhorn).
+
+    Args:
+        points:
+        num_clusters: (i.e. the cardinality)
+        model: the GNN model
+        softmax_temp: temperature of softmax (actually softmin) when estimating the objective
+        sample_num: sampling number of Gumbel
+        noise: sigma of Gumbel noise
+        tau: annealing parameter of Sinkhorn
+        sk_iters: number of max iterations of Sinkhorn
+        opt_iters: number of optimizaiton operations in testing
+        grad_step: the gradient step (i.e. "learning rate") in testing-time optimization
+        time_limit: upper limit of solving time
+        distance_metric: euclidean or manhattan
+        verbose: show more information in solving
+
+    If noise=0, it is CardNN-S;
+    If noise>0, it is CardNN-GS;
+    If more than one values of noise, tau, sk_iters, opt_iters are given, it is CardNN-HGS.
+
+    Returns: best objective score, best solution
+    """
     prev_time = time.time()
-    #dist_sorted, dist_argsort = torch.sort(dist, dim=1)
+
+    # Graph modeling of the original problem
     graph, dist = build_graph_from_points(points, None, True, distance_metric)
-    #latent_vars = torch.rand(points.shape[0], device=points.device, requires_grad=True)
+
+    # Predict the initial latent variables by NN
     latent_vars = model(graph).detach()
+
+    # Optimize over the latent variables in test
     latent_vars.requires_grad_(True)
     optimizer = torch.optim.Adam([latent_vars], lr=grad_step)
-    #lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [5000], 0.1)
     best_obj = float('inf')
     best_top_k_indices = []
     best_found_at_idx = -1
+
+    # Optimization steps (by gradient)
     if type(noise) == list and type(tau) == list and type(sk_iters) == list and type(opt_iters) == list:
         iterable = zip(noise, tau, sk_iters, opt_iters)
     else:
@@ -147,43 +179,25 @@ def sinkhorn_facility_location(points, num_clusters, model,
                 gumbel_weights_float, num_clusters,
                 max_iter=sk_iters, tau=tau, sample_num=sample_num, noise_fact=noise, return_prob=True
             )
-            # compute objective by softmax
+
+            # estimate objective by softmax (in the computational graph)
             obj = compute_objective_differentiable(dist, probs, temp=softmax_temp)
-            '''
-            # compute objective by argmin
-            sorted_probs = probs[:, dist_argsort]
-            cumsum_sorted_probs = torch.cumsum(sorted_probs, dim=2)
-            mask = (cumsum_sorted_probs <= 1).to(dtype=torch.float)
-            def index_3dtensor_by_2dmask(t, m):
-                return torch.gather(t, 2, m.sum(dim=-1, keepdim=True).to(dtype=torch.long))
-            t = - (index_3dtensor_by_2dmask(cumsum_sorted_probs, mask) - 1) #/ index_3dtensor_by_2dmask(sorted_probs, mask)
-            new_probs = sorted_probs.scatter_add(2, mask.sum(dim=-1, keepdim=True).to(dtype=torch.long), t)
-            #t = 1 / index_3dtensor_by_2dmask(cumsum_sorted_probs, mask)
-            #new_probs = sorted_probs / index_3dtensor_by_2dmask(cumsum_sorted_probs, mask)
-            new_mask = mask.scatter(2, mask.sum(dim=-1).to(dtype=torch.long).unsqueeze(-1),
-                                    torch.ones(mask.shape[0], mask.shape[1], 1, device=points.device))
-            probs_with_dist = new_mask * new_probs * dist_sorted.unsqueeze(0)
-            obj = probs_with_dist.sum(dim=(1, 2))
-            '''
+
             obj.mean().backward()
             if opt_idx % 10 == 0 and verbose:
                 print(f'idx:{opt_idx} estimated {obj.min():.4f}, {obj.mean():.4f}, best {best_obj:.4f} found at {best_found_at_idx}')
-            if sample_num2 is not None and noise2 is not None:
-                top_k_indices, probs = gumbel_sinkhorn_topk(
-                    gumbel_weights_float, num_clusters,
-                    max_iter=100, tau=.05, sample_num=sample_num2, noise_fact=noise2, return_prob=True
-                )
+
+            # compute the real objective (detached from the computational graph)
             cluster_centers = torch.gather(
                 torch.repeat_interleave(points.unsqueeze(0), top_k_indices.shape[0], 0),
                 1,
                 torch.repeat_interleave(top_k_indices.unsqueeze(-1), points.shape[-1], -1)
             )
             obj = compute_objective(points.unsqueeze(0), cluster_centers, distance_metric)
+
+            # find the best solution till now
             best_idx = torch.argmin(obj)
             min_obj, top_k_indices = obj[best_idx], top_k_indices[best_idx]
-            #choice_cluster, cluster_centers, selected_indices = discrete_kmeans(
-            #    points, num_clusters, init_x=cluster_centers[best_idx], distance=distance_metric, device=points.device)
-            #min_obj = compute_objective(points, cluster_centers, distance_metric).item()
             if min_obj < best_obj:
                 best_obj = min_obj
                 best_top_k_indices = top_k_indices
@@ -192,17 +206,13 @@ def sinkhorn_facility_location(points, num_clusters, model,
                 print(f'idx:{opt_idx} real {obj.min():.4f}, {obj.mean():.4f}, best {best_obj:.4f} found at {best_found_at_idx}, now time:{time.time()-prev_time:.2f}')
             optimizer.step()
             optimizer.zero_grad()
-            #lr_scheduler.step()
         opt_iter_offset += opt_iters
     cluster_centers = torch.stack([torch.gather(points[:, _], 0, best_top_k_indices) for _ in range(points.shape[1])], dim=-1)
-    objective = compute_objective(points, cluster_centers, distance_metric).item()
-    #print(f'{index} gumbel objective={objective:.4f} selected={sorted(best_top_k_indices.cpu().numpy().tolist())} time={time.time() - prev_time}')
-    #print(cluster_centers)
-    #plt.plot(cluster_centers[:, 0].cpu(), cluster_centers[:, 1].cpu(), 'r+', label='gumbel')
 
+    # fast neighbor search by k-means (as post-processing)
     choice_cluster, cluster_centers, selected_indices = discrete_kmeans(points, num_clusters, init_x=cluster_centers, distance=distance_metric, device=points.device)
     objective = compute_objective(points, cluster_centers, distance_metric).item()
-    #plt.plot(cluster_centers[:, 0].cpu(), cluster_centers[:, 1].cpu(), 'kx', label='gumbel kmeans')
+
     return objective, selected_indices, time.time() - prev_time
 
 

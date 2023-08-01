@@ -101,6 +101,9 @@ class GNNModel(torch.nn.Module):
 
 
 def egn_max_covering(weights, sets, max_covering_items, model, egn_beta, random_trials=0, time_limit=-1):
+    """
+    Our implementation of the Erdos Goes Neural (EGN) solver for max covering.
+    """
     prev_time = time.time()
     graph = build_graph_from_weights_sets(weights, sets, weights.device)
     graph.ori_x1 = graph.x1.clone()
@@ -144,15 +147,45 @@ def egn_max_covering(weights, sets, max_covering_items, model, egn_beta, random_
     return best_objective, best_top_k_indices, time.time() - prev_time
 
 
-def sinkhorn_max_covering(weights, sets, max_covering_items, model, sample_num, noise, tau, sk_iters, opt_iters, sample_num2=None, noise2=None, verbose=True):
+def cardnn_max_covering(weights, sets, max_covering_items, model, sample_num, noise, tau, sk_iters, opt_iters, verbose=True):
+    """
+    The Cardinality neural network (CardNN) solver for max covering. This implementation supports 3 variants:
+    CardNN-S (Sinkhorn), CardNN-GS (Gumbel-Sinkhorn) and CardNN-HGS (Homotopy-Gumbel-Sinkhorn).
+
+    Args:
+        weights: the weights of each element
+        sets: indicate which elements are covered by each set
+        max_covering_items: max number of sets (i.e. the cardinality)
+        model: the GNN model
+        sample_num: sampling number of Gumbel
+        noise: sigma of Gumbel noise
+        tau: annealing parameter of Sinkhorn
+        sk_iters: number of max iterations of Sinkhorn
+        opt_iters: number of optimizaiton operations in testing
+        verbose: show more information in solving
+
+    If noise=0, it is CardNN-S;
+    If noise>0, it is CardNN-GS;
+    If more than one values of noise, tau, sk_iters, opt_iters are given, it is CardNN-HGS.
+
+    Returns: best objective score, best solution
+
+    """
+    # Graph modeling of the original problem
     graph = build_graph_from_weights_sets(weights, sets, weights.device)
+
+    # Predict the initial latent variables by NN
     latent_vars = model(graph).detach()
+
+    # Optimize over the latent variables in test
     latent_vars.requires_grad_(True)
     optimizer = torch.optim.Adam([latent_vars], lr=.1)
     bipartite_adj = None
     best_obj = 0
     best_top_k_indices = []
     best_found_at_idx = -1
+
+    # Optimization steps (by gradient)
     if type(noise) == list and type(tau) == list and type(sk_iters) == list and type(opt_iters) == list:
         iterable = zip(noise, tau, sk_iters, opt_iters)
     else:
@@ -163,14 +196,17 @@ def sinkhorn_max_covering(weights, sets, max_covering_items, model, sample_num, 
             # noise = 1 - 0.75 * train_idx / 1000
             top_k_indices, probs = gumbel_sinkhorn_topk(gumbel_weights_float, max_covering_items,
                 max_iter=sk_iters, tau=tau, sample_num=sample_num, noise_fact=noise, return_prob=True)
+
+            # estimate the objective score (in the computational graph)
             obj, bipartite_adj = compute_obj_differentiable(weights, sets, probs, bipartite_adj, probs.device)
             (-obj).mean().backward()
             if train_idx % 10 == 0 and verbose:
                 print(f'idx:{train_idx} {obj.max():.1f}, {obj.mean():.1f}, best {best_obj:.0f} found at {best_found_at_idx}')
-            if sample_num2 is not None and noise2 is not None:
-                top_k_indices, probs = gumbel_sinkhorn_topk(gumbel_weights_float, max_covering_items,
-                max_iter=sk_iters, tau=tau, sample_num=sample_num2, noise_fact=noise2, return_prob=True)
+
+            # compute the real objective (detached from the computational graph)
             obj = compute_objective(weights, sets, top_k_indices, bipartite_adj, device=probs.device)
+
+            # find the best solution till now
             best_idx = torch.argmax(obj)
             max_obj, top_k_indices = obj[best_idx], top_k_indices[best_idx]
             if max_obj > best_obj:
@@ -179,6 +215,7 @@ def sinkhorn_max_covering(weights, sets, max_covering_items, model, sample_num, 
                 best_found_at_idx = train_idx
             if train_idx % 10 == 0 and verbose:
                 print(f'idx:{train_idx} {obj.max():.1f}, {obj.mean():.1f}, best {best_obj:.0f} found at {best_found_at_idx}')
+
             optimizer.step()
             optimizer.zero_grad()
     return best_obj, best_top_k_indices
