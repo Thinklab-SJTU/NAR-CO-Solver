@@ -91,7 +91,7 @@ def cardnn_facility_location(points, num_clusters, model,
 
     If noise=0, it is CardNN-S;
     If noise>0, it is CardNN-GS;
-    If more than one values of noise, tau, sk_iters, opt_iters are given, it is CardNN-HGS.
+    If multiple values of "noise, tau, sk_iters, opt_iters" are given, it is CardNN-HGS.
 
     Returns: best objective score, best solution
     """
