@@ -67,58 +67,6 @@ class GNNModel(torch.nn.Module):
             param.zero_()
 
 
-def egn_facility_location(points, num_clusters, model,
-                          softmax_temp, egn_beta, random_trials=0,
-                          time_limit=-1, distance_metric='euclidean'):
-    """
-    Our implementation of the Erdos Goes Neural (EGN) solver for facility location.
-    """
-    prev_time = time.time()
-    graph, dist = build_graph_from_points(points, None, True, distance_metric)
-    graph.ori_x = graph.x.clone()
-    best_objective = float('inf')
-    best_selected_indices = None
-    for _ in range(random_trials if random_trials > 0 else 1):
-        if time_limit > 0 and time.time() - prev_time > time_limit:
-            break
-        if random_trials > 0:
-            graph.x = graph.ori_x + torch.randn_like(graph.x) / 100
-        probs = model(graph).detach()
-        dist_probs, probs_argsort = torch.sort(probs, descending=True)
-        selected_items = 0
-        for prob_idx in probs_argsort:
-            if selected_items >= num_clusters:
-                probs[prob_idx] = 0
-                continue
-            probs_0 = probs.clone()
-            probs_0[prob_idx] = 0
-            probs_1 = probs.clone()
-            probs_1[prob_idx] = 1
-            constraint_conflict_0 = torch.relu(probs_0.sum() - num_clusters)
-            constraint_conflict_1 = torch.relu(probs_1.sum() - num_clusters)
-            obj_0 = compute_objective_differentiable(dist, probs_0,
-                                                     temp=softmax_temp) + egn_beta * constraint_conflict_0
-            obj_1 = compute_objective_differentiable(dist, probs_1,
-                                                     temp=softmax_temp) + egn_beta * constraint_conflict_1
-            if obj_0 >= obj_1:
-                probs[prob_idx] = 1
-                selected_items += 1
-            else:
-                probs[prob_idx] = 0
-        top_k_indices = torch.topk(probs, num_clusters, dim=-1).indices
-        cluster_centers = torch.stack([torch.gather(points[:, _], 0, top_k_indices) for _ in range(points.shape[1])],
-                                      dim=-1)
-        choice_cluster, cluster_centers, selected_indices = discrete_kmeans(points, num_clusters,
-                                                                            init_x=cluster_centers,
-                                                                            distance=distance_metric,
-                                                                            device=points.device)
-        objective = compute_objective(points, cluster_centers, distance_metric).item()
-        if objective < best_objective:
-            best_objective = objective
-            best_selected_indices = selected_indices
-    return best_objective, best_selected_indices, time.time() - prev_time
-
-
 def cardnn_facility_location(points, num_clusters, model,
                              softmax_temp, sample_num, noise, tau, sk_iters, opt_iters,
                              grad_step=0.1, time_limit=-1, distance_metric='euclidean', verbose=True):
@@ -214,6 +162,58 @@ def cardnn_facility_location(points, num_clusters, model,
     objective = compute_objective(points, cluster_centers, distance_metric).item()
 
     return objective, selected_indices, time.time() - prev_time
+
+
+def egn_facility_location(points, num_clusters, model,
+                          softmax_temp, egn_beta, random_trials=0,
+                          time_limit=-1, distance_metric='euclidean'):
+    """
+    Our implementation of the Erdos Goes Neural (EGN) solver for facility location.
+    """
+    prev_time = time.time()
+    graph, dist = build_graph_from_points(points, None, True, distance_metric)
+    graph.ori_x = graph.x.clone()
+    best_objective = float('inf')
+    best_selected_indices = None
+    for _ in range(random_trials if random_trials > 0 else 1):
+        if time_limit > 0 and time.time() - prev_time > time_limit:
+            break
+        if random_trials > 0:
+            graph.x = graph.ori_x + torch.randn_like(graph.x) / 100
+        probs = model(graph).detach()
+        dist_probs, probs_argsort = torch.sort(probs, descending=True)
+        selected_items = 0
+        for prob_idx in probs_argsort:
+            if selected_items >= num_clusters:
+                probs[prob_idx] = 0
+                continue
+            probs_0 = probs.clone()
+            probs_0[prob_idx] = 0
+            probs_1 = probs.clone()
+            probs_1[prob_idx] = 1
+            constraint_conflict_0 = torch.relu(probs_0.sum() - num_clusters)
+            constraint_conflict_1 = torch.relu(probs_1.sum() - num_clusters)
+            obj_0 = compute_objective_differentiable(dist, probs_0,
+                                                     temp=softmax_temp) + egn_beta * constraint_conflict_0
+            obj_1 = compute_objective_differentiable(dist, probs_1,
+                                                     temp=softmax_temp) + egn_beta * constraint_conflict_1
+            if obj_0 >= obj_1:
+                probs[prob_idx] = 1
+                selected_items += 1
+            else:
+                probs[prob_idx] = 0
+        top_k_indices = torch.topk(probs, num_clusters, dim=-1).indices
+        cluster_centers = torch.stack([torch.gather(points[:, _], 0, top_k_indices) for _ in range(points.shape[1])],
+                                      dim=-1)
+        choice_cluster, cluster_centers, selected_indices = discrete_kmeans(points, num_clusters,
+                                                                            init_x=cluster_centers,
+                                                                            distance=distance_metric,
+                                                                            device=points.device)
+        objective = compute_objective(points, cluster_centers, distance_metric).item()
+        if objective < best_objective:
+            best_objective = objective
+            best_selected_indices = selected_indices
+    return best_objective, best_selected_indices, time.time() - prev_time
 
 
 #################################################

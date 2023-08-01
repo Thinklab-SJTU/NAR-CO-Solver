@@ -100,53 +100,6 @@ class GNNModel(torch.nn.Module):
         return torch.sigmoid(x)
 
 
-def egn_max_covering(weights, sets, max_covering_items, model, egn_beta, random_trials=0, time_limit=-1):
-    """
-    Our implementation of the Erdos Goes Neural (EGN) solver for max covering.
-    """
-    prev_time = time.time()
-    graph = build_graph_from_weights_sets(weights, sets, weights.device)
-    graph.ori_x1 = graph.x1.clone()
-    graph.ori_x2 = graph.x2.clone()
-    best_objective = 0
-    best_top_k_indices = None
-    bipartite_adj = None
-    for _ in range(random_trials if random_trials > 0 else 1):
-        if time_limit > 0 and time.time() - prev_time > time_limit:
-            break
-        if random_trials > 0:
-            graph.x1 = graph.ori_x1 + torch.randn_like(graph.ori_x1) / 100
-            graph.x2 = graph.ori_x2 + torch.randn_like(graph.ori_x2) / 100
-        probs = model(graph).detach()
-        dist_probs, probs_argsort = torch.sort(probs, descending=True)
-        selected_items = 0
-        for prob_idx in probs_argsort:
-            if selected_items >= max_covering_items:
-                probs[prob_idx] = 0
-                continue
-            probs_0 = probs.clone()
-            probs_0[prob_idx] = 0
-            probs_1 = probs.clone()
-            probs_1[prob_idx] = 1
-            constraint_conflict_0 = torch.relu(probs_0.sum() - max_covering_items)
-            constraint_conflict_1 = torch.relu(probs_1.sum() - max_covering_items)
-            obj_0, bipartite_adj = compute_obj_differentiable(weights, sets, probs_0, bipartite_adj, device=probs.device)
-            obj_0 = obj_0 - egn_beta * constraint_conflict_0
-            obj_1, bipartite_adj = compute_obj_differentiable(weights, sets, probs_1, bipartite_adj, device=probs.device)
-            obj_1 = obj_1 - egn_beta * constraint_conflict_1
-            if obj_0 <= obj_1:
-                probs[prob_idx] = 1
-                selected_items += 1
-            else:
-                probs[prob_idx] = 0
-        top_k_indices = probs.nonzero().squeeze()
-        objective = compute_objective(weights, sets, top_k_indices, bipartite_adj, device=probs.device).item()
-        if objective > best_objective:
-            best_objective = objective
-            best_top_k_indices = top_k_indices
-    return best_objective, best_top_k_indices, time.time() - prev_time
-
-
 def cardnn_max_covering(weights, sets, max_covering_items, model, sample_num, noise, tau, sk_iters, opt_iters, verbose=True):
     """
     The Cardinality neural network (CardNN) solver for max covering. This implementation supports 3 variants:
@@ -219,6 +172,53 @@ def cardnn_max_covering(weights, sets, max_covering_items, model, sample_num, no
             optimizer.step()
             optimizer.zero_grad()
     return best_obj, best_top_k_indices
+
+
+def egn_max_covering(weights, sets, max_covering_items, model, egn_beta, random_trials=0, time_limit=-1):
+    """
+    Our implementation of the Erdos Goes Neural (EGN) solver for max covering.
+    """
+    prev_time = time.time()
+    graph = build_graph_from_weights_sets(weights, sets, weights.device)
+    graph.ori_x1 = graph.x1.clone()
+    graph.ori_x2 = graph.x2.clone()
+    best_objective = 0
+    best_top_k_indices = None
+    bipartite_adj = None
+    for _ in range(random_trials if random_trials > 0 else 1):
+        if time_limit > 0 and time.time() - prev_time > time_limit:
+            break
+        if random_trials > 0:
+            graph.x1 = graph.ori_x1 + torch.randn_like(graph.ori_x1) / 100
+            graph.x2 = graph.ori_x2 + torch.randn_like(graph.ori_x2) / 100
+        probs = model(graph).detach()
+        dist_probs, probs_argsort = torch.sort(probs, descending=True)
+        selected_items = 0
+        for prob_idx in probs_argsort:
+            if selected_items >= max_covering_items:
+                probs[prob_idx] = 0
+                continue
+            probs_0 = probs.clone()
+            probs_0[prob_idx] = 0
+            probs_1 = probs.clone()
+            probs_1[prob_idx] = 1
+            constraint_conflict_0 = torch.relu(probs_0.sum() - max_covering_items)
+            constraint_conflict_1 = torch.relu(probs_1.sum() - max_covering_items)
+            obj_0, bipartite_adj = compute_obj_differentiable(weights, sets, probs_0, bipartite_adj, device=probs.device)
+            obj_0 = obj_0 - egn_beta * constraint_conflict_0
+            obj_1, bipartite_adj = compute_obj_differentiable(weights, sets, probs_1, bipartite_adj, device=probs.device)
+            obj_1 = obj_1 - egn_beta * constraint_conflict_1
+            if obj_0 <= obj_1:
+                probs[prob_idx] = 1
+                selected_items += 1
+            else:
+                probs[prob_idx] = 0
+        top_k_indices = probs.nonzero().squeeze()
+        objective = compute_objective(weights, sets, top_k_indices, bipartite_adj, device=probs.device).item()
+        if objective > best_objective:
+            best_objective = objective
+            best_top_k_indices = top_k_indices
+    return best_objective, best_top_k_indices, time.time() - prev_time
 
 
 def lml_max_covering(weights, sets, max_covering_items, model, opt_iters, verbose=True):
