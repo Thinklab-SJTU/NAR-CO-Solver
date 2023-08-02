@@ -17,7 +17,7 @@ cfg = load_config()
 device = torch.device('cuda:0')
 
 wb = xlwt.Workbook()
-ws = wb.add_sheet(f'clustering_{cfg.test_data_type}_{cfg.test_num_centers}-{cfg.num_data}')
+ws = wb.add_sheet(f'facility_location_{cfg.test_data_type}_{cfg.test_num_facilities}-{cfg.num_data}')
 ws.write(0, 0, 'name')
 timestamp = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
 
@@ -36,12 +36,12 @@ else:
 model = GNNModel().to(device)
 
 for method_name in cfg.methods:
-    model_path = f'facility_location_{cfg.train_data_type}_{cfg.train_num_centers}-{cfg.num_data}_{method_name}.pt'
+    model_path = f'facility_location_{cfg.train_data_type}_{cfg.train_num_facilities}-{cfg.num_data}_{method_name}.pt'
     if not os.path.exists(model_path) and method_name in ['cardnn-gs', 'cardnn-s', 'egn']:
         print(f'Training the model weights for {method_name}...')
         model = GNNModel().to(device)
         if method_name in ['cardnn-gs', 'cardnn-s']:
-            train_outer_optimizer = torch.optim.Adam(model.parameters(), lr=.1)
+            train_optimizer = torch.optim.Adam(model.parameters(), lr=cfg.train_lr)
             for epoch in range(cfg.train_iter):
                 # training loop
                 obj_sum = 0
@@ -55,30 +55,31 @@ for method_name in cfg.methods:
                         sample_num = 1
                         noise_fact = 0
                     top_k_indices, probs = gumbel_sinkhorn_topk(
-                        latent_vars, cfg.train_num_centers, max_iter=100, tau=.05,
+                        latent_vars, cfg.train_num_facilities, max_iter=100, tau=.05,
                         sample_num=sample_num, noise_fact=noise_fact, return_prob=True
                     )
                     # compute objective by softmax
                     obj = compute_objective_differentiable(dist, probs, temp=50) # set smaller temp during training
                     obj.mean().backward()
                     obj_sum += obj.mean()
-                    train_outer_optimizer.step()
-                    train_outer_optimizer.zero_grad()
+                    train_optimizer.step()
+                    train_optimizer.zero_grad()
                 print(f'epoch {epoch}/{cfg.train_iter}, obj={obj_sum / len(train_dataset)}')
+
         if method_name in ['egn']:
-            train_outer_optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+            train_optimizer = torch.optim.Adam(model.parameters(), lr=cfg.train_lr_egn)
             # training loop
             for epoch in range(cfg.train_iter_egn):
                 obj_sum = 0
                 for index, (_, points) in enumerate(train_dataset):
                     graph, dist = build_graph_from_points(points, None, True, cfg.distance_metric)
                     probs = model(graph)
-                    constraint_conflict = torch.relu(probs.sum() - cfg.train_num_centers)
+                    constraint_conflict = torch.relu(probs.sum() - cfg.train_num_facilities)
                     obj = compute_objective_differentiable(dist, probs, temp=50) + cfg.egn_beta * constraint_conflict
                     obj.mean().backward()
                     obj_sum += obj.mean()
-                    train_outer_optimizer.step()
-                    train_outer_optimizer.zero_grad()
+                    train_optimizer.step()
+                    train_optimizer.zero_grad()
 
                 print(f'epoch {epoch}/{cfg.train_iter_egn}, obj={obj_sum / len(train_dataset)}')
         torch.save(model.state_dict(), model_path)
@@ -101,13 +102,13 @@ for index, (prob_name, points) in enumerate(dataset):
     plt.plot(points[:, 0].cpu(), points[:, 1].cpu(), 'b.')
     method_idx = 0
     print('-' * 20)
-    print(f'{prob_name} points={len(points)} select={cfg.test_num_centers}')
+    print(f'{prob_name} points={len(points)} select={cfg.test_num_facilities}')
     ws.write(index + 1, 0, prob_name)
 
     if 'greedy' in cfg.methods:
         method_idx += 1
         prev_time = time.time()
-        cluster_centers, selected_indices = greedy_facility_location(points, cfg.test_num_centers, distance=cfg.distance_metric, device=points.device)
+        cluster_centers, selected_indices = greedy_facility_location(points, cfg.test_num_facilities, distance=cfg.distance_metric, device=points.device)
         objective = compute_objective(points, cluster_centers, cfg.distance_metric).item()
         print(f'{prob_name} greedy objective={objective:.4f} '
               f'selected={sorted(selected_indices.cpu().numpy().tolist())} '
@@ -123,7 +124,7 @@ for index, (prob_name, points) in enumerate(dataset):
         method_idx += 1
         prev_time = time.time()
         ip_obj, ip_scores = gurobi_facility_location(
-            points, cfg.test_num_centers, distance=cfg.distance_metric, linear_relaxation=False,
+            points, cfg.test_num_facilities, distance=cfg.distance_metric, linear_relaxation=False,
             timeout_sec=cfg.solver_timeout, verbose=cfg.verbose)
         ip_scores = torch.tensor(ip_scores)
         top_k_indices = torch.nonzero(ip_scores, as_tuple=False).view(-1)
@@ -141,7 +142,7 @@ for index, (prob_name, points) in enumerate(dataset):
         method_idx += 1
         prev_time = time.time()
         ip_obj, ip_scores = ortools_facility_location(
-            points, cfg.test_num_centers, distance=cfg.distance_metric, linear_relaxation=False,
+            points, cfg.test_num_facilities, distance=cfg.distance_metric, linear_relaxation=False,
             timeout_sec=cfg.solver_timeout, solver_name='SCIP')
         ip_scores = torch.tensor(ip_scores)
         top_k_indices = torch.nonzero(ip_scores, as_tuple=False).view(-1)
@@ -157,9 +158,9 @@ for index, (prob_name, points) in enumerate(dataset):
     if 'egn' in cfg.methods:
         # Erdos Goes Neural
         method_idx += 1
-        model.load_state_dict(torch.load(f'facility_location_{cfg.train_data_type}_{cfg.train_num_centers}-{cfg.num_data}_egn.pt'))
+        model.load_state_dict(torch.load(f'facility_location_{cfg.train_data_type}_{cfg.train_num_facilities}-{cfg.num_data}_egn.pt'))
         objective, selected_indices, finish_time = egn_facility_location(
-            points, cfg.test_num_centers, model, cfg.softmax_temp, cfg.egn_beta,
+            points, cfg.test_num_facilities, model, cfg.softmax_temp, cfg.egn_beta,
             time_limit=-1, distance_metric=cfg.distance_metric)
         print(f'{prob_name} EGN objective={objective:.4f} selected={sorted(selected_indices.cpu().numpy().tolist())} time={finish_time}')
         if index == 0:
@@ -170,7 +171,7 @@ for index, (prob_name, points) in enumerate(dataset):
 
         method_idx += 1
         objective, selected_indices, finish_time = egn_facility_location(
-            points, cfg.test_num_centers, model, cfg.softmax_temp, cfg.egn_beta, cfg.egn_trials,
+            points, cfg.test_num_facilities, model, cfg.softmax_temp, cfg.egn_beta, cfg.egn_trials,
             time_limit=-1, distance_metric=cfg.distance_metric)
         print(f'{prob_name} EGN-accu objective={objective:.4f} selected={sorted(selected_indices.cpu().numpy().tolist())} time={finish_time}')
         if index == 0:
@@ -182,8 +183,8 @@ for index, (prob_name, points) in enumerate(dataset):
     if 'cardnn-s' in cfg.methods:
         # CardNN-S
         method_idx += 1
-        model.load_state_dict(torch.load(f'facility_location_{cfg.train_data_type}_{cfg.train_num_centers}-{cfg.num_data}_cardnn-s.pt'))
-        objective, selected_indices, finish_time = cardnn_facility_location(points, cfg.test_num_centers, model,
+        model.load_state_dict(torch.load(f'facility_location_{cfg.train_data_type}_{cfg.train_num_facilities}-{cfg.num_data}_cardnn-s.pt'))
+        objective, selected_indices, finish_time = cardnn_facility_location(points, cfg.test_num_facilities, model,
                                                                             cfg.softmax_temp, 1, 0, cfg.sinkhorn_tau,
                                                                             cfg.sinkhorn_iter, cfg.soft_opt_iter,
                                                                             time_limit=-1,
@@ -199,8 +200,8 @@ for index, (prob_name, points) in enumerate(dataset):
     if 'cardnn-gs' in cfg.methods:
         # CardNN-GS
         method_idx += 1
-        model.load_state_dict(torch.load(f'facility_location_{cfg.train_data_type}_{cfg.train_num_centers}-{cfg.num_data}_cardnn-gs.pt'))
-        objective, selected_indices, finish_time = cardnn_facility_location(points, cfg.test_num_centers, model,
+        model.load_state_dict(torch.load(f'facility_location_{cfg.train_data_type}_{cfg.train_num_facilities}-{cfg.num_data}_cardnn-gs.pt'))
+        objective, selected_indices, finish_time = cardnn_facility_location(points, cfg.test_num_facilities, model,
                                                                             cfg.softmax_temp, cfg.gumbel_sample_num,
                                                                             cfg.gumbel_sigma, cfg.sinkhorn_tau,
                                                                             cfg.sinkhorn_iter, cfg.gs_opt_iter,
@@ -218,8 +219,8 @@ for index, (prob_name, points) in enumerate(dataset):
     if 'cardnn-hgs' in cfg.methods:
         # CardNN-HGS
         method_idx += 1
-        model.load_state_dict(torch.load(f'facility_location_{cfg.train_data_type}_{cfg.train_num_centers}-{cfg.num_data}_cardnn-gs.pt'))
-        objective, selected_indices, finish_time = cardnn_facility_location(points, cfg.test_num_centers, model,
+        model.load_state_dict(torch.load(f'facility_location_{cfg.train_data_type}_{cfg.train_num_facilities}-{cfg.num_data}_cardnn-gs.pt'))
+        objective, selected_indices, finish_time = cardnn_facility_location(points, cfg.test_num_facilities, model,
                                                                             cfg.softmax_temp, cfg.gumbel_sample_num,
                                                                             cfg.homotophy_sigma, cfg.homotophy_tau,
                                                                             cfg.homotophy_sk_iter,
@@ -233,5 +234,5 @@ for index, (prob_name, points) in enumerate(dataset):
         ws.write(index + 1, method_idx * 2 - 1, objective)
         ws.write(index + 1, method_idx * 2, finish_time)
 
-    wb.save(f'facility_location_result_{cfg.test_data_type}_{cfg.test_num_centers}-{cfg.num_data}_{timestamp}.xls')
+    wb.save(f'facility_location_result_{cfg.test_data_type}_{cfg.test_num_facilities}-{cfg.num_data}_{timestamp}.xls')
     plt.close()

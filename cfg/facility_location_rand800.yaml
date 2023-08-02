@@ -3,9 +3,10 @@ test_data_type: 'random'
 distance_metric: 'euclidean'
 dim: 2
 num_data: 800
-train_num_centers: 50
-test_num_centers: 50
-train_lr: 1.e-4
+train_num_facilities: 50
+test_num_facilities: 50
+train_lr: 0.1
+train_lr_egn: 1.e-3
 train_iter: 100 # for CardNN
 train_iter_egn: 500 # for EGN
 

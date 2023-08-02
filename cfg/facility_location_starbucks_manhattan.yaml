@@ -3,9 +3,10 @@ test_data_type: 'starbucks'
 distance_metric: 'manhattan'
 dim: 2
 num_data: 500
-train_num_centers: 30
-test_num_centers: 30 # training/testing data may be different (transfer learning)
-train_lr: 1.e-4
+train_num_facilities: 30
+test_num_facilities: 30 # training/testing data may be different (transfer learning)
+train_lr: 0.1
+train_lr_egn: 1.e-3
 train_iter: 100 # for CardNN
 train_iter_egn: 500 # for EGN
 

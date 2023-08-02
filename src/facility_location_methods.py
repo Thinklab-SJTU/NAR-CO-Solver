@@ -67,7 +67,7 @@ class GNNModel(torch.nn.Module):
             param.zero_()
 
 
-def cardnn_facility_location(points, num_clusters, model,
+def cardnn_facility_location(points, num_facilities, model,
                              softmax_temp, sample_num, noise, tau, sk_iters, opt_iters,
                              grad_step=0.1, time_limit=-1, distance_metric='euclidean', verbose=True):
     """
@@ -75,8 +75,8 @@ def cardnn_facility_location(points, num_clusters, model,
     CardNN-S (Sinkhorn), CardNN-GS (Gumbel-Sinkhorn) and CardNN-HGS (Homotopy-Gumbel-Sinkhorn).
 
     Args:
-        points:
-        num_clusters: (i.e. the cardinality)
+        points: the set of points
+        num_facilities: max number of facilities (i.e. the cardinality)
         model: the GNN model
         softmax_temp: temperature of softmax (actually softmin) when estimating the objective
         sample_num: sampling number of Gumbel
@@ -124,7 +124,7 @@ def cardnn_facility_location(points, num_clusters, model,
 
             gumbel_weights_float = torch.sigmoid(latent_vars)
             top_k_indices, probs = gumbel_sinkhorn_topk(
-                gumbel_weights_float, num_clusters,
+                gumbel_weights_float, num_facilities,
                 max_iter=sk_iters, tau=tau, sample_num=sample_num, noise_fact=noise, return_prob=True
             )
 
@@ -158,13 +158,13 @@ def cardnn_facility_location(points, num_clusters, model,
     cluster_centers = torch.stack([torch.gather(points[:, _], 0, best_top_k_indices) for _ in range(points.shape[1])], dim=-1)
 
     # fast neighbor search by k-means (as post-processing)
-    choice_cluster, cluster_centers, selected_indices = discrete_kmeans(points, num_clusters, init_x=cluster_centers, distance=distance_metric, device=points.device)
+    choice_cluster, cluster_centers, selected_indices = discrete_kmeans(points, num_facilities, init_x=cluster_centers, distance=distance_metric, device=points.device)
     objective = compute_objective(points, cluster_centers, distance_metric).item()
 
     return objective, selected_indices, time.time() - prev_time
 
 
-def egn_facility_location(points, num_clusters, model,
+def egn_facility_location(points, num_facilities, model,
                           softmax_temp, egn_beta, random_trials=0,
                           time_limit=-1, distance_metric='euclidean'):
     """
@@ -184,15 +184,15 @@ def egn_facility_location(points, num_clusters, model,
         dist_probs, probs_argsort = torch.sort(probs, descending=True)
         selected_items = 0
         for prob_idx in probs_argsort:
-            if selected_items >= num_clusters:
+            if selected_items >= num_facilities:
                 probs[prob_idx] = 0
                 continue
             probs_0 = probs.clone()
             probs_0[prob_idx] = 0
             probs_1 = probs.clone()
             probs_1[prob_idx] = 1
-            constraint_conflict_0 = torch.relu(probs_0.sum() - num_clusters)
-            constraint_conflict_1 = torch.relu(probs_1.sum() - num_clusters)
+            constraint_conflict_0 = torch.relu(probs_0.sum() - num_facilities)
+            constraint_conflict_1 = torch.relu(probs_1.sum() - num_facilities)
             obj_0 = compute_objective_differentiable(dist, probs_0,
                                                      temp=softmax_temp) + egn_beta * constraint_conflict_0
             obj_1 = compute_objective_differentiable(dist, probs_1,
@@ -202,10 +202,10 @@ def egn_facility_location(points, num_clusters, model,
                 selected_items += 1
             else:
                 probs[prob_idx] = 0
-        top_k_indices = torch.topk(probs, num_clusters, dim=-1).indices
+        top_k_indices = torch.topk(probs, num_facilities, dim=-1).indices
         cluster_centers = torch.stack([torch.gather(points[:, _], 0, top_k_indices) for _ in range(points.shape[1])],
                                       dim=-1)
-        choice_cluster, cluster_centers, selected_indices = discrete_kmeans(points, num_clusters,
+        choice_cluster, cluster_centers, selected_indices = discrete_kmeans(points, num_facilities,
                                                                             init_x=cluster_centers,
                                                                             distance=distance_metric,
                                                                             device=points.device)
@@ -536,7 +536,7 @@ def spectral_clustering(sim_matrix: Tensor, cluster_num: int, init: Tensor=None,
 
 def greedy_facility_location(
         X: Tensor,
-        num_clusters: int,
+        num_facilities: int,
         weight: Tensor=None,
         distance: str='euclidean',
         device=torch.device('cpu'),
@@ -547,7 +547,7 @@ def greedy_facility_location(
     Here "discrete" means the selected cluster centers must be a subset of the input data :math:`\mathbf X`.
 
     :param X: :math:`(n\times d)` input data matrix. :math:`n`: number of samples. :math:`d`: feature dimension
-    :param num_clusters: (int) number of clusters
+    :param num_facilities: (int) number of clusters
     :param distance: distance [options: 'euclidean', 'cosine'] [default: 'euclidean']
     :param device: computing device [default: cpu]
     :return: cluster centers, selected indices
@@ -562,7 +562,7 @@ def greedy_facility_location(
 
     selected_indices = []
     unselected_indices = list(range(X.shape[0]))
-    for cluster_center_idx in range(num_clusters):
+    for cluster_center_idx in range(num_facilities):
         best_dis = float('inf')
         best_idx = -1
         for unselected_idx in unselected_indices:
@@ -584,7 +584,7 @@ def greedy_facility_location(
 
 def ortools_facility_location(
         X: Tensor,
-        num_clusters: int,
+        num_facilities: int,
         distance: str='euclidean',
         solver_name=None,
         linear_relaxation=True,
@@ -625,7 +625,7 @@ def ortools_facility_location(
     X_constraint = 0
     for selected_id in range(X.shape[0]):
         X_constraint += VarX[selected_id]
-    solver.Add(X_constraint <= num_clusters)
+    solver.Add(X_constraint <= num_facilities)
 
     for selected_id in range(X.shape[0]):
         ConstY1[selected_id] = 0
@@ -664,7 +664,7 @@ def ortools_facility_location(
 
 def gurobi_facility_location(
         X: Tensor,
-        num_clusters: int,
+        num_facilities: int,
         distance: str='euclidean',
         linear_relaxation=True,
         timeout_sec=60,
@@ -707,7 +707,7 @@ def gurobi_facility_location(
         X_constraint = 0
         for selected_id in range(X.shape[0]):
             X_constraint += VarX[selected_id]
-        model.addConstr(X_constraint <= num_clusters)
+        model.addConstr(X_constraint <= num_facilities)
         for selected_id in range(X.shape[0]):
             ConstY1[selected_id] = 0
             for all_point_id in range(X.shape[0]):
