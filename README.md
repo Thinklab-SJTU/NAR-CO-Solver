@@ -164,7 +164,7 @@ online resources available.
 Then install the following Python packages:
 
 ```
-pip install ortools easydict matplotlib yfinance pandas cvxpylayers xlwt
+pip install ortools easydict matplotlib yfinance pandas cvxpylayers xlwt pyyaml gurobipy
 ```
 
 ## Run the Experiments
