@@ -186,7 +186,7 @@ On synthetic data, 800 locations.
 python facility_location_experiment.py --cfg cfg/facility_location_rand800.yaml
 ```
 
-On real-world data (Starbucks), distance measured by Euclidean distance. 
+On real-world data (Starbucks), distance measured by Euclidean distance (or more precisely, Euclidean squared distance https://github.com/Thinklab-SJTU/One-Shot-Cardinality-NN-Solver/issues/8). 
 ```bash
 python facility_location_experiment.py --cfg cfg/facility_location_starbucks_euclidean.yaml
 ```
