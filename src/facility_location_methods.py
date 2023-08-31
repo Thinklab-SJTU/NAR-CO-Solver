@@ -734,9 +734,15 @@ def gurobi_facility_location(
 
         res = [model.getVarByName(f'x_{set_id}').X for set_id in range(X.shape[0])]
         if linear_relaxation:
-            res = np.array(res, dtype=np.float)
+            try:
+                res = np.array(res, dtype=np.float)
+            except:
+                res = np.array(res, dtype=float)
         else:
-            res = np.array(res, dtype=np.int)
+            try:
+                res = np.array(res, dtype=np.int)
+            except:
+                res = np.array(res, dtype=int)
         return model.getObjective().getValue(), torch.from_numpy(res).to(X.device)
 
     except grb.GurobiError as e:

@@ -325,9 +325,15 @@ def gurobi_portfolio_opt(
 
         res = [model.getVarByName(f'x_{i}').X for i in range(mu.shape[0])]
         if linear_relaxation:
-            res = np.array(res, dtype=np.float)
+            try:
+                res = np.array(res, dtype=np.float)
+            except:
+                res = np.array(res, dtype=float)
         else:
-            res = np.array(res, dtype=np.int)
+            try:
+                res = np.array(res, dtype=np.int)
+            except:
+                res = np.array(res, dtype=int)
         weight = np.array([model.getVarByName(f'w_{i}').X for i in range(mu.shape[0])])
         if obj == 'Sharpe':
             weight = weight / weight.sum()

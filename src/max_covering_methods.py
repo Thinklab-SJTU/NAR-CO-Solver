@@ -506,7 +506,10 @@ def gurobi_max_covering(weights, sets, max_selected, linear_relaxation=True, tim
 
         res = [model.getVarByName(f'x_{set_id}').X for set_id in range(len(sets))]
         if tensor_input:
-            res = np.array(res, dtype=np.int)
+            try:
+                res = np.array(res, dtype=np.int)
+            except:
+                res = np.array(res, dtype=int)
             return model.getObjective().getValue(), torch.from_numpy(res).to(device)
         else:
             return model.getObjective().getValue(), res
