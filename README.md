@@ -1,23 +1,31 @@
-# One-Shot-CardNN-Solver
-This is the official implementation of our ICLR 2023 paper "Towards One-shot Neural Combinatorial Solvers: Theoretical and Empirical Notes on the Cardinality-Constrained Case". 
+# NonAutoRegressive-CO-Solver
+This is the implementation of our non-autoregressive combinatorial optimization solvers that
+solves combinatorial optimization problems with the positive linear constraint:
+$$\min_\mathbf{x} J(\mathbf{w},\mathbf{x}), \qquad s.t. \mathbf{A}\mathbf{x} \leq \mathbf{b}, \mathbf{C}\mathbf{x} \geq \mathbf{d}, \mathbf{E}\mathbf{x} = \mathbf{f}, \qquad \text{where} \ \mathbf{A},\mathbf{b},\mathbf{C},\mathbf{d},\mathbf{E},\mathbf{f}\geq 0, \ \mathbf{x}\in[0, 1]^l.$$
 
-* [[paper]](https://openreview.net/pdf?id=h21yJhdzbwz)
+This repository covers the following papers:
 
-This work is jointly done by [ThinkLab@SJTU](http://thinklab.sjtu.edu.cn) and [JD Explore Academy](https://corporate.jd.com/).
+* "Towards One-shot Neural Combinatorial Solvers: Theoretical and Empirical Notes on the Cardinality-Constrained Case". 
+  ICLR 2023. [[paper]](https://openreview.net/pdf?id=h21yJhdzbwz)
+* "Learning to Solve Combinatorial Optimization under Positive Linear Constraints via Non-Autoregressive Neural Networks."
+  _Under review of SCIENTIA SINICA Informationis_. [paper coming soon]
+
+This work is contributed by [ThinkLab@SJTU](http://thinklab.sjtu.edu.cn) and [JD Explore Academy](https://corporate.jd.com/).
 
 This repository offers neural network solvers, datasets, training and evaluation protocols
-for three cardinality-constrained combinatorial optimization problems: 
+for three combinatorial optimization problems: 
 * Facility Location Problem (FLP), on synthetic data and real-world Starbucks locations;
 * Max Covering Problem (MCP), on synthetic data and real-world Twitch datasets;
 * Portfolio Optimization (PortOpt), on real-world stock prices in 2021.
 
-## A Brief Introduction of our Paper
+## A Brief Introduction of the Technical Side
 
-As read from the title, our ultimate goal is building _one-shot neural combinatorial solvers_:
+Our ultimate goal is building _non-autoregressive neural combinatorial solvers_:
 a neural network whose input is the parameters of a combinatorial optimization (CO) problem, 
-and whose output is the solution (i.e. the decision variables). The neural network is expected 
-to output the solution in one-shot, instead of a tedious multi-step auto-regressive manner. 
-We believe such one-shot neural solvers have the following advantages over traditional solvers:
+and whose output is the solution (i.e. the decision variables). The neural network is designed 
+with a non-autoregressive structure (i.e. outputs the solution in one-shot), instead of a tedious
+multi-step autoregressive manner. We believe such non-autoregressive neural solvers have the 
+following advantages over traditional solvers:
 * Higher efficiency (neural solvers on GPU vs traditional solvers on CPU)
 * Enabling joint predict-and-optimize paradigms (differentiable neural solvers vs usually 
   non-differentiable traditional solvers)
@@ -25,24 +33,29 @@ We believe such one-shot neural solvers have the following advantages over tradi
 Towards the ultimate goal, we identify the following technical challenges: the output of neural 
 networks is usually unconstrained, yet the solutions to combinatorial optimization usually have
 complicated constraints. Besides, the discrete nature of combinatorial constraints conflicts 
-with the continuous nature of neural networks. To resolve these issues, this paper champions 
-the following methodology: softly enforcing constraints to neural networks by a differentiable
-layer. The overview of such a pipeline is shown as follows.
+with the continuous nature of neural networks. To resolve these issues, we champion 
+the following methodology: 
 
-![overview](imgs/one-shot-nn.png)
+![overview](imgs/nar-nn.png)
 
-The key is developing the differentiable constraint layer and designing efficient 
-self-supervised loss (usually by estimating the objective score). Such a flexible design also
-enables gradient-based update at testing time.
+The technical highlights are:
+* Softly enforcing constraints to neural networks by a differentiable layer ([LinSAT Layer](https://github.com/Thinklab-SJTU/LinSATNet));
+* Using Gumbel trick to control the constraint violation (theoretical results were derived for the 
+  cardinality-constrained case in ICLR'23 paper);
+* Estimating the objective score end-to-end and train the neural network solver by an unsupervised loss;
+* Turning the training framework into a gradient-based search framework in testing. See the following plot
+![test-time search](imgs/nar-search.png)
 
-Seeing that a general method to handle all CO problems seems too challenging, this paper 
-focuses on developing a more practical paradigm for solving the cardinality-constrained CO. We 
-present a differentiable layer named CardNN to handle cardinality constraints, which is based 
-on Sinkhorn iterations and Gumbel trick, and conduct theoretical study of the design of the 
-constraint-enforcing layer. We are not diving too deep into the theoretical results of
-Gumbel-Sinkhorn in this introduction, and here summarizes our main conclusion: 
 
-> A tighter **constraint violation** leads to better performance for one-shot neural 
+### Theoretical results
+
+Theoretically characterizing all CO problems seems to challenging. Our ICLR'23 paper 
+focuses on developing theoretical results for the special case of cardinality-constrained
+CO, and did a systematic study of with/without constraint encoding layers and with/without
+the Gumbel trick. We are not diving too deep into the theoretical results, and here 
+summarizes our main conclusion: 
+
+> A tighter **constraint violation** leads to better performance for non-autoregressive neural 
 > combinatorial solvers.
 
 We believe such theoretical insights could further generalize to other CO problems beyond 
@@ -54,10 +67,12 @@ In this paper, we compare three ways of handling cardinality constraints, theore
   puts constraint violation as a penalty term in the loss. Theoretically, the neural net's output
   can be arbitrary thus the constraint violation is unbonded.
 * **SOFT-TopK** [(Xie et al., NeurIPS'20)](https://proceedings.neurips.cc/paper_files/paper/2020/file/ec24a54d62ce57ba93a531b460fa8d18-Paper.pdf)
-  uses Sinkhorn to enforce cardinality constraint, which is equivalent to a TopK selection. 
+  is equivalent to LinSAT _without_ Gumbel trick.
+  It uses Sinkhorn to enforce cardinality constraint, which is equivalent to a TopK selection. 
   SOFT-TopK offers an upper-bound of constraint violation, yet the bound can diverge in the wost
   case (when k-th and (k+1)-th elements are equal).
-* **Gumbel-Sinkhorn-TopK** (this paper) further addresses the diverging issue in SOFT-TopK. 
+* **Gumbel-Sinkhorn-TopK** (this paper) is equivalent to our methodology with LinSAT and Gumbel trick.
+  It further addresses the diverging issue in SOFT-TopK. 
   Specifically, the constraint violation can be arbitrarily controlled, and its theoretical 
   upper bound is tighter than SOFT-TopK by introducing the Gumbel trick.
   
