@@ -1,4 +1,4 @@
-# NonAutoRegressive-CO-Solver
+# Non-AutoRegressive-CO-Solver
 This is the implementation of our non-autoregressive combinatorial optimization solvers that
 solves combinatorial optimization problems with the positive linear constraint:
 $$\min_\mathbf{x} J(\mathbf{w},\mathbf{x}), \qquad s.t. \mathbf{A}\mathbf{x} \leq \mathbf{b}, \mathbf{C}\mathbf{x} \geq \mathbf{d}, \mathbf{E}\mathbf{x} = \mathbf{f}, \qquad \text{where} \ \mathbf{A},\mathbf{b},\mathbf{C},\mathbf{d},\mathbf{E},\mathbf{f}\geq 0, \ \mathbf{x}\in[0, 1]^l.$$
