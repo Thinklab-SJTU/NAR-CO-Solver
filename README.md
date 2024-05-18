@@ -49,8 +49,10 @@ The technical highlights are:
 
 ### Theoretical results
 
-Theoretically characterizing all CO problems seems to challenging. Our ICLR'23 paper 
-focuses on developing theoretical results for the special case of cardinality-constrained
+One major challenge in the above pipeline is handling discrete constraints in an end-to-end
+neural network, and we tried to offer some theoretical insights in that. However, the
+theoretical characterization for all CO problems seems too challenging. Our ICLR'23 paper 
+focused on developing theoretical results for the special case of cardinality-constrained
 CO, and did a systematic study of with/without constraint encoding layers and with/without
 the Gumbel trick. We are not diving too deep into the theoretical results, and here 
 summarizes our main conclusion: 
