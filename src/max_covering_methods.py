@@ -5,6 +5,7 @@ import torch
 import torch_geometric as pyg
 import time
 from src.gumbel_sinkhorn_topk import gumbel_sinkhorn_topk
+from src.gumbel_linsat_layer import gumbel_linsat_layer, init_linsat_constraints
 import src.perturbations as perturbations
 import constraint_layers.blackbox_diff as blackbox_diff
 from constraint_layers.lml import LML
@@ -169,6 +170,69 @@ def cardnn_max_covering(weights, sets, max_covering_items, model, sample_num, no
             if train_idx % 10 == 0 and verbose:
                 print(f'idx:{train_idx} {obj.max():.1f}, {obj.mean():.1f}, best {best_obj:.0f} found at {best_found_at_idx}')
 
+            optimizer.step()
+            optimizer.zero_grad()
+    return best_obj, best_top_k_indices
+
+
+def linsat_max_covering(weights, sets, max_covering_items, model, sample_num, noise, tau, sk_iters, opt_iters, verbose=True):
+    """
+    The neural network solver for max covering based on LinSATNet.
+
+    Args:
+        weights: the weights of each element
+        sets: indicate which elements are covered by each set
+        max_covering_items: max number of sets (i.e. the cardinality)
+        model: the GNN model
+        sample_num: sampling number of Gumbel
+        noise: sigma of Gumbel noise
+        tau: annealing parameter of LinSAT
+        sk_iters: number of max iterations of LinSAT
+        opt_iters: number of optimizaiton operations in testing
+        verbose: show more information in solving
+
+    Returns: best objective score, best solution
+    """
+    graph = build_graph_from_weights_sets(weights, sets, weights.device)
+    latent_vars = model(graph).detach()
+    latent_vars.requires_grad_(True)
+    optimizer = torch.optim.Adam([latent_vars], lr=.1)
+    bipartite_adj = None
+    best_obj = 0
+    best_top_k_indices = []
+    best_found_at_idx = -1
+    if type(noise) == list and type(tau) == list and type(sk_iters) == list and type(opt_iters) == list:
+        iterable = zip(noise, tau, sk_iters, opt_iters)
+    else:
+        iterable = zip([noise], [tau], [sk_iters], [opt_iters])
+    linsat_constr = None
+    for noise, tau, sk_iters, opt_iters in iterable:
+        for train_idx in range(opt_iters):
+            gumbel_weights_float = torch.sigmoid(latent_vars)
+
+            # constraint: sum(gumbel_weights_float) <= k
+            A = torch.ones(1, len(sets), device=weights.device)
+            b = torch.tensor([max_covering_items], dtype=A.dtype, device=weights.device)
+            if linsat_constr is None:
+                linsat_constr = init_linsat_constraints(gumbel_weights_float, A, b)
+            probs = gumbel_linsat_layer(gumbel_weights_float, linsat_constr,
+                max_iter=sk_iters, tau=tau, sample_num=sample_num, noise_fact=noise)
+            obj, bipartite_adj = compute_obj_differentiable(weights, sets, probs, bipartite_adj, probs.device)
+            (-obj).mean().backward()
+
+            if train_idx % 10 == 0 and verbose:
+                print(f'idx:{train_idx} estimated_obj max={obj.max():.1f}, mean={obj.mean():.1f}, best {best_obj:.0f} found at {best_found_at_idx}')
+
+            top_k_indices = torch.topk(probs, max_covering_items, dim=-1).indices
+            obj = compute_objective(weights, sets, top_k_indices, bipartite_adj, device=probs.device)
+            best_idx = torch.argmax(obj)
+            max_obj, top_k_indices = obj[best_idx], top_k_indices[best_idx]
+            if max_obj > best_obj:
+                best_obj = max_obj
+                best_top_k_indices = top_k_indices
+                best_found_at_idx = train_idx
+            if train_idx % 10 == 0 and verbose:
+                print(f'idx:{train_idx} real_obj max={obj.max():.1f}, mean={obj.mean():.1f}, best {best_obj:.0f} found at {best_found_at_idx}')
             optimizer.step()
             optimizer.zero_grad()
     return best_obj, best_top_k_indices

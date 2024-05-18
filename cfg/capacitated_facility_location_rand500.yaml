@@ -1,0 +1,28 @@
+train_data_type: 'random'
+test_data_type: 'random'
+distance_metric: 'euclidean'
+with_demand: True
+max_demand: 0.01
+dim: 2
+num_data: 500
+train_num_facilities: 30
+test_num_facilities: 30
+train_lr: 0.1
+train_lr_egn: 1.e-3
+train_iter: 100 # for LinSATNet
+
+verbose: False
+
+methods:
+   - 'gurobi'
+   - 'linsatnet'
+
+solver_timeout: 100 # time limit for SCIP/Gurobi
+
+# Config for LinSATNet
+linsat_softmax_temp: 100
+linsat_tau: 0.05
+linsat_sigma: 0.1
+linsat_sk_iter: 200
+linsat_opt_iter: 250
+gumbel_sample_num: 100

@@ -17,6 +17,7 @@ methods:
    - 'cardnn-s'
    - 'cardnn-gs'
    - 'cardnn-hgs'
+   - 'linsatnet'
 
 solver_timeout: 30 # time limit for SCIP/Gurobi
 
@@ -50,3 +51,9 @@ homotophy_opt_iter:
   - 400
   - 100
   - 100
+
+# Config for LinSATNet
+linsat_tau: 0.1
+linsat_sigma: 0.03
+linsat_sk_iter: 20
+linsat_opt_iter: 500

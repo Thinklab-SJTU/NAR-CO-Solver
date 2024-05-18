@@ -15,11 +15,8 @@ from src.config import load_config
 
 cfg = load_config()
 device = torch.device('cuda:0')
-
-wb = xlwt.Workbook()
-ws = wb.add_sheet(f'facility_location_{cfg.test_data_type}_{cfg.test_num_facilities}-{cfg.num_data}')
-ws.write(0, 0, 'name')
-timestamp = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+for k, v in cfg.items():
+    print(f'{k}: {v}')
 
 
 ####################################
@@ -27,7 +24,12 @@ timestamp = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
 ####################################
 
 if cfg.train_data_type == 'random':
-    train_dataset = get_random_data(cfg.num_data, cfg.dim, 0, device)
+    cfg_dict = {}
+    if 'with_demand' in cfg:
+        cfg_dict['demand'] = cfg.with_demand
+    if 'max_demand' in cfg:
+        cfg_dict['max_demand'] = cfg.max_demand
+    train_dataset = get_random_data(cfg.num_data, cfg.dim, 0, device, **cfg_dict)
 elif cfg.train_data_type == 'starbucks':
     train_dataset = get_starbucks_data(device)
 else:
@@ -37,7 +39,7 @@ model = GNNModel().to(device)
 
 for method_name in cfg.methods:
     model_path = f'facility_location_{cfg.train_data_type}_{cfg.train_num_facilities}-{cfg.num_data}_{method_name}.pt'
-    if not os.path.exists(model_path) and method_name in ['cardnn-gs', 'cardnn-s', 'egn']:
+    if not os.path.exists(model_path) and method_name in ['cardnn-gs', 'cardnn-s', 'linsatnet', 'egn']:
         print(f'Training the model weights for {method_name}...')
         model = GNNModel().to(device)
         if method_name in ['cardnn-gs', 'cardnn-s']:
@@ -45,11 +47,11 @@ for method_name in cfg.methods:
             for epoch in range(cfg.train_iter):
                 # training loop
                 obj_sum = 0
-                for index, (_, points) in enumerate(train_dataset):
+                for index, (_, points, __) in enumerate(train_dataset):
                     graph, dist = build_graph_from_points(points, None, True, cfg.distance_metric)
                     latent_vars = model(graph)
                     if method_name == 'cardnn-gs':
-                        sample_num = cfg.gumbel_sample_num
+                        sample_num = cfg.train_gumbel_sample_num
                         noise_fact = cfg.gumbel_sigma
                     else:
                         sample_num = 1
@@ -66,16 +68,50 @@ for method_name in cfg.methods:
                     train_optimizer.zero_grad()
                 print(f'epoch {epoch}/{cfg.train_iter}, obj={obj_sum / len(train_dataset)}')
 
+        if method_name in ['linsatnet']:
+            train_optimizer = torch.optim.Adam(model.parameters(), lr=cfg.train_lr)
+            for epoch in range(cfg.train_iter):
+                # training loop
+                obj_sum = 0
+                for index, (_, points, demands) in enumerate(train_dataset):
+                    graph, dist = build_graph_from_points(points, None, True, cfg.distance_metric)
+                    latent_vars = model(graph)
+
+                    A = torch.ones(1, len(points), device=latent_vars.device)
+                    b = torch.tensor([cfg.train_num_facilities], dtype=A.dtype, device=latent_vars.device)
+                    if demands is None:
+                        C = d = None
+                    else:
+                        C = torch.ones(1, len(points), device=latent_vars.device)
+                        d = torch.tensor([torch.sum(demands)], dtype=C.dtype, device=latent_vars.device)
+                    probs = gumbel_linsat_layer(torch.sigmoid(latent_vars), A=A, b=b, C=C, d=d,
+                                                max_iter=cfg.linsat_sk_iter, tau=cfg.linsat_tau,
+                                                sample_num=cfg.train_gumbel_sample_num, noise_fact=cfg.linsat_sigma)
+
+                    # compute objective by softmax
+                    obj = compute_objective_differentiable(dist, probs, demands, temp=cfg.linsat_softmax_temp)
+                    obj.mean().backward()
+                    obj_sum += obj.mean()
+
+                    train_optimizer.step()
+                    train_optimizer.zero_grad()
+
+                print(f'epoch {epoch}/{cfg.train_iter}, obj={obj_sum / len(train_dataset)}')
+
         if method_name in ['egn']:
             train_optimizer = torch.optim.Adam(model.parameters(), lr=cfg.train_lr_egn)
             # training loop
             for epoch in range(cfg.train_iter_egn):
                 obj_sum = 0
-                for index, (_, points) in enumerate(train_dataset):
+                for index, (_, points, demands) in enumerate(train_dataset):
                     graph, dist = build_graph_from_points(points, None, True, cfg.distance_metric)
                     probs = model(graph)
-                    constraint_conflict = torch.relu(probs.sum() - cfg.train_num_facilities)
-                    obj = compute_objective_differentiable(dist, probs, temp=50) + cfg.egn_beta * constraint_conflict
+                    cardinality_cv = torch.relu(probs.sum() - cfg.train_num_facilities)
+                    if demands is None:
+                        total_cv = cardinality_cv
+                    else:
+                        total_cv = cardinality_cv + torch.relu(torch.sum(demands) - probs.sum())
+                    obj = compute_objective_differentiable(dist, probs, demands, temp=50) + cfg.egn_beta * total_cv
                     obj.mean().backward()
                     obj_sum += obj.mean()
                     train_optimizer.step()
@@ -90,14 +126,24 @@ for method_name in cfg.methods:
 #            testing               #
 ####################################
 
+wb = xlwt.Workbook()
+ws = wb.add_sheet(f'flp_{cfg.test_data_type}_{cfg.test_num_facilities}-{cfg.num_data}')
+ws.write(0, 0, 'name')
+timestamp = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+
 if cfg.test_data_type == 'random':
-    dataset = get_random_data(cfg.num_data, cfg.dim, 1, device)
+    cfg_dict = {}
+    if 'with_demand' in cfg:
+        cfg_dict['demand'] = cfg.with_demand
+    if 'max_demand' in cfg:
+        cfg_dict['max_demand'] = cfg.max_demand
+    dataset = get_random_data(cfg.num_data, cfg.dim, 1, device, **cfg_dict)
 elif cfg.test_data_type == 'starbucks':
     dataset = get_starbucks_data(device)
 else:
     raise ValueError(f'Unknown dataset name {cfg.train_dataset_type}!')
 
-for index, (prob_name, points) in enumerate(dataset):
+for index, (prob_name, points, demands) in enumerate(dataset):
     fig = plt.figure(figsize=(10, 10))
     plt.plot(points[:, 0].cpu(), points[:, 1].cpu(), 'b.')
     method_idx = 0
@@ -108,8 +154,9 @@ for index, (prob_name, points) in enumerate(dataset):
     if 'greedy' in cfg.methods:
         method_idx += 1
         prev_time = time.time()
-        cluster_centers, selected_indices = greedy_facility_location(points, cfg.test_num_facilities, distance=cfg.distance_metric, device=points.device)
-        objective = compute_objective(points, cluster_centers, cfg.distance_metric).item()
+        selected_points, selected_indices = greedy_facility_location(points, cfg.test_num_facilities, demands,
+                                                                     distance=cfg.distance_metric, device=points.device)
+        objective = compute_objective(points, selected_points, cfg.distance_metric, demands).item()
         print(f'{prob_name} greedy objective={objective:.4f} '
               f'selected={sorted(selected_indices.cpu().numpy().tolist())} '
               f'time={time.time() - prev_time}')
@@ -124,7 +171,7 @@ for index, (prob_name, points) in enumerate(dataset):
         method_idx += 1
         prev_time = time.time()
         ip_obj, ip_scores = gurobi_facility_location(
-            points, cfg.test_num_facilities, distance=cfg.distance_metric, linear_relaxation=False,
+            points, cfg.test_num_facilities, demands, distance=cfg.distance_metric, linear_relaxation=False,
             timeout_sec=cfg.solver_timeout, verbose=cfg.verbose)
         ip_scores = torch.tensor(ip_scores)
         top_k_indices = torch.nonzero(ip_scores, as_tuple=False).view(-1)
@@ -231,6 +278,24 @@ for index, (prob_name, points) in enumerate(dataset):
         if index == 0:
             ws.write(0, method_idx * 2 - 1, 'CardNN-HGS-objective')
             ws.write(0, method_idx * 2, 'CardNN-HGS-time')
+        ws.write(index + 1, method_idx * 2 - 1, objective)
+        ws.write(index + 1, method_idx * 2, finish_time)
+
+    if 'linsatnet' in cfg.methods:
+        # LinSATNet
+        method_idx += 1
+        model.load_state_dict(torch.load(f'facility_location_{cfg.train_data_type}_{cfg.train_num_facilities}-{cfg.num_data}_linsatnet.pt'))
+        objective, selected_indices, finish_time = linsat_facility_location(points, cfg.test_num_facilities, demands, model,
+                                                                            cfg.linsat_softmax_temp, cfg.gumbel_sample_num,
+                                                                            cfg.linsat_sigma, cfg.linsat_tau,
+                                                                            cfg.linsat_sk_iter,
+                                                                            cfg.linsat_opt_iter, time_limit=-1,
+                                                                            distance_metric=cfg.distance_metric,
+                                                                            verbose=cfg.verbose)
+        print(f'{prob_name} LinSATNet objective={objective:.4f} selected={sorted(selected_indices.cpu().numpy().tolist())} time={finish_time}')
+        if index == 0:
+            ws.write(0, method_idx * 2 - 1, 'LinSATNet-objective')
+            ws.write(0, method_idx * 2, 'LinSATNet-time')
         ws.write(index + 1, method_idx * 2 - 1, objective)
         ws.write(index + 1, method_idx * 2, finish_time)
 

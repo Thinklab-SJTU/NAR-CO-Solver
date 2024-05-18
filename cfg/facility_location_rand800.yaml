@@ -1,6 +1,7 @@
 train_data_type: 'random'
 test_data_type: 'random'
 distance_metric: 'euclidean'
+with_demand: False
 dim: 2
 num_data: 800
 train_num_facilities: 50
@@ -20,6 +21,7 @@ methods:
    - 'cardnn-s'
    - 'cardnn-gs'
    - 'cardnn-hgs'
+   - 'linsatnet'
 
 solver_timeout: 200 # time limit for SCIP/Gurobi
 
@@ -54,3 +56,10 @@ homotophy_opt_iter:
   - 1000
   - 500
   - 200
+
+# Config for LinSATNet
+linsat_softmax_temp: 70
+linsat_tau: 0.05
+linsat_sigma: 0.15
+linsat_sk_iter: 200
+linsat_opt_iter: 600

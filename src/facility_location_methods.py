@@ -6,25 +6,57 @@ from ortools.linear_solver import pywraplp
 import torch_geometric as pyg
 import time
 from src.gumbel_sinkhorn_topk import gumbel_sinkhorn_topk
+from src.gumbel_linsat_layer import gumbel_linsat_layer, init_linsat_constraints
+from constraint_layers.sinkhorn import Sinkhorn
+from src.optimal_transport import ortools_ot, OptimalTransportLayer
 
 
 ####################################
 #        helper functions          #
 ####################################
 
-def compute_objective(points, cluster_centers, distance_metric='euclidean', choice_cluster=None):
+def compute_objective(points, selected_points, distance_metric='euclidean', demands=None):
+    if len(points.shape) == 2:
+        points = points.unsqueeze(0)
     dist_func = _get_distance_func(distance_metric)
-    dist = dist_func(points, cluster_centers, points.device)
-    if choice_cluster is None:
-        choice_cluster = torch.argmin(dist, dim=-1)
-    return torch.sum(torch.gather(dist, -1, choice_cluster.unsqueeze(-1)).squeeze(-1), dim=-1)
+    dist = dist_func(points, selected_points, points.device)
+    if demands is None: # FLP w/o demand
+        return torch.sum(torch.gather(dist, -1, torch.argmin(dist, dim=-1).unsqueeze(-1)).squeeze(-1), dim=-1)
+    else: # FLP w/ demand
+        if len(selected_points.shape) == 3:
+            batch_size = selected_points.shape[0]
+        else:
+            selected_points = selected_points.unsqueeze(0)
+            batch_size = 1
+        dummy = selected_points.shape[1] - torch.sum(demands)
+        row_dummy = torch.cat((demands, dummy.unsqueeze(-1)), dim=-1).unsqueeze(0).repeat(batch_size, 1)
+        col = torch.ones(selected_points.shape[1]).unsqueeze(0).repeat(batch_size, 1)
+        dist_dummy = torch.cat((dist, torch.zeros(batch_size, 1, dist.shape[2], device=dist.device)), dim=1)
+        obj_scores = ortools_ot(dist_dummy, row_dummy, col)
+        return obj_scores
 
 
-def compute_objective_differentiable(dist, probs, temp=30):
-    exp_dist = torch.exp(-temp / dist.mean() * dist)
-    exp_dist_probs = exp_dist.unsqueeze(0) * probs.unsqueeze(-1)
-    probs_per_dist = exp_dist_probs / exp_dist_probs.sum(1, keepdim=True)
-    obj = (probs_per_dist * dist).sum(dim=(1, 2))
+def compute_objective_differentiable(dist, probs, demands=None, temp=30, sk_iter=40):
+    if demands is None: # FLP w/o demand
+        exp_dist = torch.exp(-temp / dist.mean() * dist)
+        exp_dist_probs = exp_dist.unsqueeze(0) * probs.unsqueeze(-1)
+        probs_per_dist = exp_dist_probs / exp_dist_probs.sum(1, keepdim=True)
+        obj = (probs_per_dist * dist).sum(dim=(1, 2))
+    else: # FLP w/ demand
+        # the objective estimation is an OT problem: move probs to demands
+        batch_size = probs.shape[0]
+        # sk = Sinkhorn(max_iter=sk_iter, tau=1 / temp, batched_operation=True)
+        sk2 = OptimalTransportLayer(gamma=temp, maxiters=sk_iter) # this implementation requires less GPU mem
+        dummy = torch.sum(probs, dim=-1) - torch.sum(demands)
+        col_dummy = torch.cat((demands.unsqueeze(0).repeat(batch_size, 1), dummy.unsqueeze(-1)), dim=-1)
+        if len(dist.shape) == 2:
+            dist_dummy = torch.cat((dist, torch.zeros(dist.shape[0], 1, device=dist.device)), dim=-1).unsqueeze(0).repeat(batch_size, 1, 1)
+        else:
+            assert len(dist.shape) == 3
+            dist_dummy = torch.cat((dist, torch.zeros(dist.shape[0], dist.shape[1], 1, device=dist.device)), dim=-1)
+        # transp_mat = sk(-dist_dummy, probs, col_dummy)
+        transp_mat = sk2(dist_dummy, probs, col_dummy) * torch.sum(probs, dim=1).reshape(batch_size, 1, 1)
+        obj = (transp_mat * dist_dummy).sum(dim=(1, 2))
     return obj
 
 
@@ -162,6 +194,146 @@ def cardnn_facility_location(points, num_facilities, model,
     objective = compute_objective(points, cluster_centers, distance_metric).item()
 
     return objective, selected_indices, time.time() - prev_time
+
+
+def linsat_facility_location(points, num_facilities, demands, model,
+                             softmax_temp, sample_num, noise, tau, sk_iters, opt_iters,
+                             grad_step=0.1, time_limit=-1, distance_metric='euclidean', verbose=True):
+    """
+    The neural network solver for facility location based on LinSATNet.
+
+    Args:
+        points: the set of points
+        num_facilities: max number of facilities (i.e. the cardinality). If not None, we are solving K-Median FLP
+        demands: demands of each point. If not None, we are solving standard FLP
+        model: the GNN model
+        softmax_temp: temperature of softmax (actually softmin) when estimating the objective
+        sample_num: sampling number of Gumbel
+        noise: sigma of Gumbel noise
+        tau: annealing parameter of LinSAT
+        sk_iters: number of max iterations of LinSAT
+        opt_iters: number of optimizaiton operations in testing
+        grad_step: the gradient step (i.e. "learning rate") in testing-time optimization
+        time_limit: upper limit of solving time
+        distance_metric: euclidean or manhattan
+        verbose: show more information in solving
+
+    Returns: best objective score, best solution
+    """
+    prev_time = time.time()
+
+    # Graph modeling of the original problem
+    graph, dist = build_graph_from_points(points, None, True, distance_metric)
+
+    # Predict the initial latent variables by NN
+    latent_vars = model(graph).detach()
+
+    # Optimize over the latent variables in test
+    latent_vars.requires_grad_(True)
+    optimizer = torch.optim.Adam([latent_vars], lr=grad_step)
+    best_obj = float('inf')
+    best_top_k_indices = []
+    best_found_at_idx = -1
+
+    # Optimization steps (by gradient)
+    if type(softmax_temp) == list and type(noise) == list and type(tau) == list and type(sk_iters) == list and type(opt_iters) == list:
+        iterable = zip(softmax_temp, noise, tau, sk_iters, opt_iters)
+    else:
+        iterable = zip([softmax_temp], [noise], [tau], [sk_iters], [opt_iters])
+    opt_iter_offset = 0
+    linsat_constr = None
+    for softmax_temp, noise, tau, sk_iters, opt_iters in iterable:
+        for opt_idx in range(opt_iter_offset, opt_iter_offset + opt_iters):
+            gumbel_weights_float = torch.sigmoid(latent_vars)
+            # time limit control
+            if time_limit > 0 and time.time() - prev_time > time_limit:
+                break
+
+            A = torch.ones(1, len(points), device=latent_vars.device)
+            b = torch.tensor([num_facilities], dtype=A.dtype, device=A.device)
+            if demands is None:
+                C = d = None
+            else:
+                C = torch.ones(1, len(points), device=latent_vars.device)
+                d = torch.tensor([torch.sum(demands)], dtype=C.dtype, device=latent_vars.device)
+            if linsat_constr is None:
+                linsat_constr = init_linsat_constraints(gumbel_weights_float, A, b, C, d)
+            probs = gumbel_linsat_layer(gumbel_weights_float, linsat_constr,
+                                        max_iter=sk_iters, tau=tau, sample_num=sample_num, noise_fact=noise)
+
+            # estimate objective by softmax (in the computational graph)
+            obj = compute_objective_differentiable(dist, probs, demands, temp=softmax_temp, sk_iter=40)
+
+            obj.mean().backward()
+            optimizer.step()
+            optimizer.zero_grad()
+
+            if opt_idx % 10 == 0 and verbose:
+                print(f'idx:{opt_idx} estimated {obj.min():.4f}, {obj.mean():.4f}, best {best_obj:.4f} found at {best_found_at_idx}')
+
+            # compute the real objective (detached from the computational graph)
+            top_k_indices = torch.topk(probs, num_facilities, dim=-1).indices
+            if demands is None:
+                selected_points = torch.gather(
+                    torch.repeat_interleave(points.unsqueeze(0), top_k_indices.shape[0], 0),
+                    1,
+                    torch.repeat_interleave(top_k_indices.unsqueeze(-1), points.shape[-1], -1)
+                )
+                obj = compute_objective(points.unsqueeze(0), selected_points, distance_metric, demands)
+            else: # use faster sinkhorn OT
+                dist_to_selected = torch.gather(
+                    torch.repeat_interleave(dist.unsqueeze(0), top_k_indices.shape[0], 0),
+                    1,
+                    torch.repeat_interleave(top_k_indices.unsqueeze(-1), dist.shape[-1], -1)
+                )
+                obj = compute_objective_differentiable(
+                    dist_to_selected,
+                    torch.ones(sample_num, num_facilities, device=probs.device),
+                    demands,
+                    temp=1000, sk_iter=100
+                )
+
+                # slower version, for reference
+                # selected_points = torch.gather(
+                #     torch.repeat_interleave(points.unsqueeze(0), top_k_indices.shape[0], 0),
+                #     1,
+                #     torch.repeat_interleave(top_k_indices.unsqueeze(-1), points.shape[-1], -1)
+                # )
+                # obj = compute_objective(points.unsqueeze(0), selected_points, distance_metric, demands)
+
+            best_idx = torch.argmin(obj)
+            top_k_indices = top_k_indices[best_idx]
+            selected_points = torch.stack(
+                [torch.gather(points[:, _], 0, top_k_indices) for _ in range(points.shape[1])], dim=-1)
+            # fast neighborhood search by k-means
+            choice_cluster, selected_points, selected_indices = discrete_kmeans(
+                points, num_facilities, init_x=selected_points, distance=distance_metric, device=points.device)
+            if demands is None:
+                min_obj = compute_objective(points.unsqueeze(0), selected_points, distance_metric, demands).item()
+            else:
+                dist_to_selected = torch.gather(dist, 0, torch.repeat_interleave(top_k_indices.unsqueeze(-1), dist.shape[-1], -1))
+                min_obj = compute_objective_differentiable(
+                    dist_to_selected.unsqueeze(0),
+                    torch.ones(1, num_facilities, device=probs.device),
+                    demands,
+                    temp=1000, sk_iter=100
+                ).item()
+
+            # find the best solution till now
+            if min_obj < best_obj:
+                best_obj = min_obj
+                best_top_k_indices = selected_indices
+                best_found_at_idx = opt_idx
+            if opt_idx % 10 == 0 and verbose:
+                print(f'idx:{opt_idx} real {min_obj:.4f}, {obj.mean():.4f}, best {best_obj:.4f} found at {best_found_at_idx}, now time:{time.time()-prev_time:.2f}')
+
+        opt_iter_offset += opt_iters
+
+    if demands is not None:
+        selected_points = torch.stack([torch.gather(points[:, _], 0, best_top_k_indices)
+                                       for _ in range(points.shape[1])], dim=-1)
+        best_obj = compute_objective(points.unsqueeze(0), selected_points, distance_metric, demands).item()
+    return best_obj, best_top_k_indices, time.time() - prev_time
 
 
 def egn_facility_location(points, num_facilities, model,
@@ -537,9 +709,11 @@ def spectral_clustering(sim_matrix: Tensor, cluster_num: int, init: Tensor=None,
 def greedy_facility_location(
         X: Tensor,
         num_facilities: int,
-        weight: Tensor=None,
+        demands: Tensor=None,
         distance: str='euclidean',
         device=torch.device('cpu'),
+        sk_iter = 200,
+        sk_temp = 200,
 ) -> Tuple[Tensor, Tensor]:
     r"""
     Greedy algorithm for facility location problem.
@@ -547,9 +721,12 @@ def greedy_facility_location(
     Here "discrete" means the selected cluster centers must be a subset of the input data :math:`\mathbf X`.
 
     :param X: :math:`(n\times d)` input data matrix. :math:`n`: number of samples. :math:`d`: feature dimension
-    :param num_facilities: (int) number of clusters
-    :param distance: distance [options: 'euclidean', 'cosine'] [default: 'euclidean']
+    :param num_facilities: (int) number of facilities to be selected
+    :param demands: (optional) the demand on each point
+    :param distance: distance [options: 'euclidean', 'manhattan', 'cosine'] [default: 'euclidean']
     :param device: computing device [default: cpu]
+    :param sk_iter: number of iterations of Sinkhorn (useful when demands is not None)
+    :param sk_temp: temperature parameter of Sinkhorn (useful when demands is not None)
     :return: cluster centers, selected indices
     """
     pairwise_distance_function = _get_distance_func(distance)
@@ -562,16 +739,36 @@ def greedy_facility_location(
 
     selected_indices = []
     unselected_indices = list(range(X.shape[0]))
+    if demands is not None:
+        sk = Sinkhorn(max_iter=sk_iter, tau=1 / sk_temp, batched_operation=True)
     for cluster_center_idx in range(num_facilities):
-        best_dis = float('inf')
+        best_obj = float('inf')
         best_idx = -1
         for unselected_idx in unselected_indices:
             selected = torch.tensor(selected_indices + [unselected_idx], device=device)
             selected_X = torch.index_select(X, 0, selected)
             dis = pairwise_distance_function(X, selected_X, device)
-            nearest_dis = dis.min(dim=1).values.sum()
-            if nearest_dis < best_dis:
-                best_dis = nearest_dis
+            if demands is None:
+                obj = dis.min(dim=1).values.sum()
+            else:
+                if selected_X.shape[0] >= torch.sum(demands):
+                    #obj = compute_objective(X, selected_X, distance, demands)
+                    dummy = selected_X.shape[0] - torch.sum(demands)
+                    row = torch.cat((demands, torch.tensor([dummy], device=device)))
+                    col = torch.ones(selected_X.shape[0], device=device)
+                    dis = torch.cat((dis, torch.zeros(1, dis.shape[1], device=device)), dim=0)
+                else:
+                    dummy = torch.sum(demands) - selected_X.shape[0]
+                    col = torch.cat((torch.ones(selected_X.shape[0], device=device),
+                                     torch.tensor([dummy], device=device)))
+                    row = demands
+                    dis = torch.cat((dis, torch.zeros(dis.shape[0], 1, device=device)), dim=1)
+                    #obj = ortools_ot(dis_dummy, demands, col)
+                transp_mat = sk(-dis.unsqueeze(0), row.unsqueeze(0), col.unsqueeze(0)).squeeze(0)
+                obj = (transp_mat * dis).sum()
+
+            if obj < best_obj:
+                best_obj = obj
                 best_idx = unselected_idx
 
         unselected_indices.remove(best_idx)
@@ -665,6 +862,7 @@ def ortools_facility_location(
 def gurobi_facility_location(
         X: Tensor,
         num_facilities: int,
+        demands: Tensor=None,
         distance: str='euclidean',
         linear_relaxation=True,
         timeout_sec=60,
@@ -685,8 +883,8 @@ def gurobi_facility_location(
         X = X.cpu()
 
         # Initialize variables
-        VarX = {}
-        VarY = {}
+        VarX = {} # decision variable: select/not select
+        VarY = {} # auxiliary variable: y_{i,j} is moved from i to j
         ConstY1 = {}
         ConstY2 = {}
         for selected_id in range(X.shape[0]):
@@ -698,7 +896,7 @@ def gurobi_facility_location(
                 VarX[selected_id].start = start[selected_id]
             VarY[selected_id] = {}
             for all_point_id in range(X.shape[0]):
-                if linear_relaxation:
+                if linear_relaxation or demands is not None:
                     VarY[selected_id][all_point_id] = model.addVar(0.0, 1.0, vtype=grb.GRB.CONTINUOUS, name=f'y_{selected_id}_{all_point_id}')
                 else:
                     VarY[selected_id][all_point_id] = model.addVar(vtype=grb.GRB.BINARY, name=f'y_{selected_id}_{all_point_id}')
@@ -712,12 +910,18 @@ def gurobi_facility_location(
             ConstY1[selected_id] = 0
             for all_point_id in range(X.shape[0]):
                 ConstY1[selected_id] += VarY[selected_id][all_point_id]
-            model.addConstr(ConstY1[selected_id] <= VarX[selected_id] * X.shape[0])
+            if demands is None:
+                model.addConstr(ConstY1[selected_id] <= VarX[selected_id] * X.shape[0])
+            else:
+                model.addConstr(ConstY1[selected_id] <= VarX[selected_id])
         for all_point_id in range(X.shape[0]):
             ConstY2[all_point_id] = 0
             for selected_id in range(X.shape[0]):
                 ConstY2[all_point_id] += VarY[selected_id][all_point_id]
-            model.addConstr(ConstY2[all_point_id] == 1)
+            if demands is None:
+                model.addConstr(ConstY2[all_point_id] == 1)
+            else:
+                model.addConstr(ConstY2[all_point_id] == demands[all_point_id])
 
         # The distance
         pairwise_distance_function = _get_distance_func(distance)

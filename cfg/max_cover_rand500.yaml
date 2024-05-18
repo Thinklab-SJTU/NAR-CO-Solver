@@ -17,9 +17,11 @@ methods:
    - 'cardnn-s'
    - 'cardnn-gs'
    - 'cardnn-hgs'
-   - 'perturb-topk'
-   - 'blackbox-topk'
-   - 'lml-topk'
+   - 'linsatnet'
+# the following 3 are Top-K baselines in Table 2 in our ICLR paper
+#   - 'perturb-topk'
+#   - 'blackbox-topk'
+#   - 'lml-topk'
 
 solver_timeout: 30 # time limit for SCIP/Gurobi
 
@@ -53,6 +55,12 @@ homotophy_opt_iter:
   - 1000
   - 100
   - 100
+
+# Config for LinSATNet
+linsat_tau: 0.05
+linsat_sigma: 0.1
+linsat_sk_iter: 200
+linsat_opt_iter: 200
 
 # Config for perturb differentiation baseline
 perturb_sigma: 0.01

@@ -12,6 +12,8 @@ from src.max_covering_data import get_random_dataset, get_twitch_dataset
 
 cfg = load_config()
 device = torch.device('cuda:0')
+for k, v in cfg.items():
+    print(f'{k}: {v}')
 
 
 ####################################
@@ -29,7 +31,7 @@ model = GNNModel().to(device)
 
 for method_name in cfg.methods:
     model_path = f'max_covering_{cfg.train_data_type}_{cfg.train_max_covering_items}-{cfg.num_sets}-{cfg.num_items}_{method_name}.pt'
-    if not os.path.exists(model_path) and method_name in ['cardnn-gs', 'cardnn-s', 'egn']:
+    if not os.path.exists(model_path) and method_name in ['cardnn-gs', 'cardnn-s', 'linsatnet', 'egn']:
         print(f'Training the model weights for {method_name}...')
         model = GNNModel().to(device)
         if method_name in ['cardnn-gs', 'cardnn-s']:
@@ -60,6 +62,33 @@ for method_name in cfg.methods:
                     train_optimizer.zero_grad()
 
                 print(f'epoch {epoch}/{cfg.train_iter}, obj={obj_sum / len(train_dataset)}')
+
+        if method_name in ['linsatnet']:
+            train_optimizer = torch.optim.Adam(model.parameters(), lr=cfg.train_lr)
+            for epoch in range(cfg.train_iter):
+                # training loop
+                obj_sum = 0
+                for name, weights, sets in train_dataset:
+                    bipartite_adj = None
+                    graph = build_graph_from_weights_sets(weights, sets, device)
+                    latent_vars = model(graph)
+
+                    A = torch.ones(1, len(sets), device=latent_vars.device)
+                    b = torch.tensor([cfg.train_max_covering_items], dtype=A.dtype, device=latent_vars.device)
+                    probs = gumbel_linsat_layer(torch.sigmoid(latent_vars), A=A, b=b,
+                                                max_iter=cfg.linsat_sk_iter, tau=cfg.linsat_tau,
+                                                sample_num=cfg.train_gumbel_sample_num, noise_fact=cfg.linsat_sigma)
+
+                    # compute objective by softmax
+                    obj, _ = compute_obj_differentiable(weights, sets, probs, bipartite_adj, device=probs.device)
+                    (-obj).mean().backward()
+                    obj_sum += obj.mean()
+
+                    train_optimizer.step()
+                    train_optimizer.zero_grad()
+
+                print(f'epoch {epoch}/{cfg.train_iter}, obj={obj_sum / len(train_dataset)}')
+
         if method_name in ['egn']:
             train_optimizer = torch.optim.Adam(model.parameters(), lr=cfg.train_lr)
             # training loop
@@ -216,6 +245,23 @@ for index, (name, weights, sets) in enumerate(dataset):
         if index == 0:
             ws.write(0, method_idx * 2 - 1, 'CardNN-HGS-objective')
             ws.write(0, method_idx * 2, 'CardNN-HGS-time')
+        ws.write(index + 1, method_idx * 2 - 1, best_obj.item())
+        ws.write(index + 1, method_idx * 2, time.time() - prev_time)
+
+    # LinSATNet
+    if 'linsatnet' in cfg.methods:
+        method_idx += 1
+        prev_time = time.time()
+        model_path = f'max_covering_{cfg.train_data_type}_{cfg.train_max_covering_items}-{cfg.num_sets}-{cfg.num_items}_linsatnet.pt'
+        model.load_state_dict(torch.load(model_path))
+        best_obj, best_top_k_indices = linsat_max_covering(weights, sets, cfg.test_max_covering_items, model,
+                                                           cfg.gumbel_sample_num, cfg.linsat_sigma,
+                                                           cfg.linsat_tau, cfg.linsat_sk_iter,
+                                                           cfg.linsat_opt_iter, verbose=cfg.verbose)
+        print(f'{name} LinSATNet objective={best_obj:.0f} selected={sorted(best_top_k_indices.cpu().numpy().tolist())} time={time.time() - prev_time}')
+        if index == 0:
+            ws.write(0, method_idx * 2 - 1, 'LinSATNet-objective')
+            ws.write(0, method_idx * 2, 'LinSATNet-time')
         ws.write(index + 1, method_idx * 2 - 1, best_obj.item())
         ws.write(index + 1, method_idx * 2, time.time() - prev_time)
 
