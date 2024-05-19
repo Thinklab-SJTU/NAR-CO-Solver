@@ -39,7 +39,8 @@ the following methodology:
 ![overview](imgs/nar-nn.png)
 
 The technical highlights are:
-* Softly enforcing constraints to neural networks by a differentiable layer ([LinSAT Layer](https://github.com/Thinklab-SJTU/LinSATNet));
+* Softly enforcing constraints to neural networks by a differentiable layer ([LinSAT Layer](https://github.com/Thinklab-SJTU/LinSATNet)
+  could encode all positive linear constraints to neural networks);
 * Using Gumbel trick to control the constraint violation (theoretical results were derived for the 
   cardinality-constrained case in ICLR'23 paper);
 * Estimating the objective score end-to-end and train the neural network solver by an unsupervised loss;
