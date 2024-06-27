@@ -8,7 +8,7 @@ This repository covers the following papers:
 * "Towards One-shot Neural Combinatorial Solvers: Theoretical and Empirical Notes on the Cardinality-Constrained Case". 
   ICLR 2023. [[paper]](https://openreview.net/pdf?id=h21yJhdzbwz)
 * "Learning to Solve Combinatorial Optimization under Positive Linear Constraints via Non-Autoregressive Neural Networks."
-  _Accepted by SCIENTIA SINICA Informationis_. [paper coming soon]
+  _Accepted by SCIENTIA SINICA Informationis_. [[paper]](http://engine.scichina.com/doi/10.1360/SSI-2023-0269)
 
 This work is contributed by [ThinkLab@SJTU](http://thinklab.sjtu.edu.cn) and [JD Explore Academy](https://corporate.jd.com/).
 
