@@ -262,12 +262,11 @@ If you find our paper/code useful in your research, please cite
     booktitle={ICLR}
 }
 
-@article{wang2024,
-  author = "Runzhong Wang and Yang Li and Junchi Yan and Xiaokang Yang",
-  title = "Learning to Solve Combinatorial Optimization under Positive Linear Constraints via Non-Autoregressive Neural Networks",
-  journal = "SCIENTIA SINICA Informationis",
-  year = "2024",
-  url = "http://www.sciengine.com/publisher/Science China Press/journal/SCIENTIA SINICA Informationis///10.1360/SSI-2023-0269,
-  doi = "https://doi.org/10.1360/SSI-2023-0269"
+@article{wang2024learning,
+  author={Runzhong Wang and Yang Li and Junchi Yan and Xiaokang Yang},
+  title={Learning to Solve Combinatorial Optimization under Positive Linear Constraints via Non-Autoregressive Neural Networks},
+  journal={SCIENTIA SINICA Informationis},
+  year={2024},
+  doi={https://doi.org/10.1360/SSI-2023-0269}
 }
 ```
